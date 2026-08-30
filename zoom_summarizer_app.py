@@ -39,14 +39,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">🎥 מערכת חכמה לסיכום הקלטות זום (וידאו ואודיו)</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">מערכת מתקדמת לניתוח עומק והפקת סיכומי שיעור מלאים, מפורטים ועתירי פרטים טכניים!</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">מערכת מתקדמת עם מנגנון הגנה מעומסים להפקת סיכומי שיעור מלאים ומעמיקים!</div>', unsafe_allow_html=True)
 
 # תפריט צד (Sidebar) להגדרות
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
     api_key_input = st.text_input("הכנס מפתח Google Gemini API Key", type="password", help="ניתן להשיג בחינם מ-Google AI Studio")
     
-    # הגדרת מפתח ה-API כמשתנה סביבה כדי למנוע את שגיאת ה-401 בהעלאת קבצים
+    # הגדרת מפתח ה-API כמשתנה סביבה
     if api_key_input:
         os.environ["GEMINI_API_KEY"] = api_key_input
 
@@ -74,7 +74,6 @@ with tab1:
                 st.error("אנא הכנס מפתח API של Google Gemini בסיידבר הימני.")
             else:
                 try:
-                    # שימוש במפתח המוגדר
                     client = genai.Client(api_key=api_key_input)
                     
                     with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
@@ -102,22 +101,38 @@ with tab1:
                     סגנון הכתיבה צריך להיות מקצועי, קריא מאוד, מחולק היטב לכותרות ותת-כותרות, פסקאות מפורטות, וטבלאות היכן שזה מוסיף ערך. אל תחסוך במילים ובמידע!
                     """
                     
-                    response = client.models.generate_content(
-                        model='gemini-3.6-flash',
-                        contents=[gemini_file, prompt]
-                    )
+                    # מנגנון חכם שמנסה שוב אוטומטית אם יש עומס (Rate Limit / 429)
+                    max_retries = 3
+                    retry_delay = 15
+                    response = None
                     
-                    st.success("הסיכום המורחב הופק בהצלחה!")
-                    st.markdown("---")
-                    st.markdown("### 📝 תוצאות הסיכום המעמיק")
-                    st.markdown(response.text)
+                    for attempt in range(max_retries):
+                        try:
+                            response = client.models.generate_content(
+                                model='gemini-3.6-flash',
+                                contents=[gemini_file, prompt]
+                            )
+                            break
+                        except Exception as api_err:
+                            if "429" in str(api_err) and attempt < max_retries - 1:
+                                st.warning(f"השרת עמוס (שגיאת מכסה 429). ממתין {retry_delay} שניות ומנסה שוב (ניסיון {attempt + 2} מתוך {max_retries})...")
+                                time.sleep(retry_delay)
+                                retry_delay += 10 # הגדלת זמן ההמתנה בהדרגה
+                            else:
+                                raise api_err
                     
-                    st.download_button(
-                        label="📥 הורד סיכום מורחב כמסמך טקסט",
-                        data=response.text,
-                        file_name="deep_detailed_summary.txt",
-                        mime="text/plain"
-                    )
+                    if response:
+                        st.success("הסיכום המורחב הופק בהצלחה!")
+                        st.markdown("---")
+                        st.markdown("### 📝 תוצאות הסיכום המעמיק")
+                        st.markdown(response.text)
+                        
+                        st.download_button(
+                            label="📥 הורד סיכום מורחב כמסמך טקסט",
+                            data=response.text,
+                            file_name="deep_detailed_summary.txt",
+                            mime="text/plain"
+                        )
                     
                     if os.path.exists(temp_path):
                         os.remove(temp_path)
@@ -180,5 +195,5 @@ with tab2:
 
 with tab3:
     st.markdown("### 📖 מדריך למשתמש")
-    st.markdown("1. המערכת מוגדרת כעת במצב **'ניתוח עומק מקסימלי'**.")
-    st.markdown("2. הפרומפט החדש מחייב את המודל לכתוב פסקאות ארוכות, לפרט על כל מונח טכני ולתת סיכום רחב בדומה למחברת שיעור של סטודנט.")
+    st.markdown("1. הפק מפתח API חדש ב-Google AI Studio במידת הצורך.")
+    st.markdown("2. המערכת כוללת כעת מנגנון אוטומטי הממתין ומנסה שוב במקרה של עומס זמני מול השרת.")

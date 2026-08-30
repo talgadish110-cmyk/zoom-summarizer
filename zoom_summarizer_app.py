@@ -64,12 +64,12 @@ with tab1:
     
     with col1:
         st.markdown("### 📥 מקור הקובץ")
-        input_method = st.radio("בחר כיצד להזין את ההקלטה:", ["העלאת קובץ ישירות מהמחשב", "קישור מ-Google Drive"])
+        input_method = st.radio("בחר כיצד להזין את ההקלטה:", ["העלאת קובץ ישירות מהמחשב / נייד", "קישור מ-Google Drive (תמיכה בקבצים גדולים)"])
         
         video_file_path = None
         temp_dir = tempfile.mkdtemp()
         
-        if input_method == "העלאת קובץ ישירות מהמחשב":
+        if input_method == "העלאת קובץ ישירות מהמחשב / נייד":
             uploaded_file = st.file_uploader("בחר קובץ וידאו (MP4, AVI, MOV) עד 2GB", type=["mp4", "mov", "avi", "mkv", "webm"])
             if uploaded_file is not None:
                 video_file_path = os.path.join(temp_dir, uploaded_file.name)
@@ -82,8 +82,9 @@ with tab1:
             drive_url = st.text_input("הדבק כאן קישור שיתוף ציבורי מ-Google Drive")
             if drive_url:
                 if st.button("הורד קובץ מ-Google Drive"):
-                    with st.spinner("מוריד את הקובץ מ-Google Drive... אנא המתן"):
+                    with st.spinner("מוריד את הקובץ מ-Google Drive (עשוי לקחת מספר דקות לקבצים גדולים)... אנא המתן"):
                         try:
+                            # חילוץ מזהה הקובץ מהקישור בצורה חכמה
                             if "/d/" in drive_url:
                                 file_id = drive_url.split('/d/')[1].split('/')[0]
                             elif "id=" in drive_url:
@@ -91,14 +92,20 @@ with tab1:
                             else:
                                 raise ValueError("פורמט קישור לא תקין")
                                 
-                            download_url = f'https://drive.google.com/uc?id={file_id}'
                             video_file_path = os.path.join(temp_dir, "zoom_recording.mp4")
-                            gdown.download(download_url, video_file_path, quiet=False)
-                            st.success("הקובץ הורד בהצלחה!", icon="✅")
-                            st.video(video_file_path)
+                            
+                            # שימוש בפרמטרים עוקפי אזהרות גוגל לקבצים גדולים
+                            url = f'https://drive.google.com/uc?id={file_id}&export=download'
+                            gdown.download(url, video_file_path, quiet=False, fuzzy=True)
+                            
+                            if os.path.exists(video_file_path) and os.path.getsize(video_file_path) > 1000:
+                                st.success("הקובץ הורד בהצלחה!", icon="✅")
+                                st.video(video_file_path)
+                            else:
+                                raise Exception("הקובץ שהורד ריק או שאין הרשאות צפייה ציבוריות.")
                         except Exception as e:
                             st.error(f"שגיאה בהורדת הקובץ: {e}")
-                            st.info("ודא שהקובץ מוגדר כציבורי ('Anyone with the link can view') ב-Google Drive.")
+                            st.info("💡 טיפ: ודא שהקובץ בדרייב מוגדר כציבורי ('Anyone with the link can view') ושאין לו הגבלת הורדה חריגה.")
 
     with col2:
         st.markdown("### 🤖 עיבוד וסיכום באמצעות AI")
@@ -107,7 +114,7 @@ with tab1:
             if not api_key_input:
                 st.error("אנא הכנס מפתח API של Google Gemini בסיידבר הימני.")
             elif not video_file_path or not os.path.exists(video_file_path):
-                st.warning("אנא בחר או העלה קובץ וידאו תחילה.")
+                st.warning("אנא בחר או העලා קובץ וידאו תחילה.")
             else:
                 try:
                     client = genai.Client(api_key=api_key_input)
@@ -157,6 +164,5 @@ with tab1:
 
 with tab2:
     st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. צור קובץ דרישות בשם `requirements.txt` עם הספריות הנדרשות.")
-    st.markdown("2. התקן את הספריות בטרמינל באמצעות הפקודה:\n`pip install -r requirements.txt`")
-    st.markdown("3. הפעל את האפליקציה במחשב באמצעות הפקודה:\n`streamlit run zoom_summarizer_app.py`")
+    st.markdown("1. ודא שקובץ הדרישות `requirements.txt` מכיל את הספריות הנדרשות.")
+    st.markdown("2. האפליקציה תומכת כעת בהורדה חכמה של קבצים גדולים מ-Google Drive באמצעות פרמטרים עוקפי אזהרות.")

@@ -85,7 +85,7 @@ with tab1:
                     gemini_file = client.files.upload(file=temp_path)
                     st.success("הקובץ הועלה בהצלחה!")
                     
-                    st.info("🧠 מנתח את ההקלטה באמצעות המודל (מנסה להתחבר באופן אוטומטי אם יש עומס)...")
+                    st.info("🧠 מנתח את ההקלטה באמצעות המודל (ממתין שהשרת יעבד את הקובץ בענן)...")
                     
                     prompt = f"""
                     אתה עוזר אישי מקצועי וחכם. ניתנת לך הקלטת פגישת זום (וידאו ואודיו).
@@ -101,9 +101,9 @@ with tab1:
                     כתוב בצורה נקייה, מסודרת, מקצועית, עם כותרות בולטות.
                     """
                     
-                    # מנגנון ניסיון חוזר אוטומטי במקרה של עומס (503)
+                    # מנגנון ניסיון חוזר מורחב לעומסים ועיבוד קבצים
                     response = None
-                    max_retries = 3
+                    max_retries = 5
                     for attempt in range(max_retries):
                         try:
                             response = client.models.generate_content(
@@ -113,8 +113,8 @@ with tab1:
                             break
                         except Exception as api_err:
                             if "503" in str(api_err) and attempt < max_retries - 1:
-                                st.warning(f"השרת עמוס, מנסה שוב אוטומטית (ניסיון {attempt + 2}/{max_retries})...")
-                                time.sleep(3)
+                                st.warning(f"השרת מעבד את הקובץ או עמוס, ממתין 15 שניות ומנסה שוב (ניסיון {attempt + 2}/{max_retries})...")
+                                time.sleep(15)
                             else:
                                 raise api_err
                     

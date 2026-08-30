@@ -39,7 +39,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">🎥 מערכת חכמה לסיכום הקלטות זום (וידאו ואודיו)</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">העלה הקלטת זום מהמחשב או מהנייד, ותן לבינה המלאכותית לסכם עבורך את כל מה שנאמר!</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">מערכת מתקדמת לניתוח עומק והפקקת סיכומי שיעור מלאים, מפורטים ועתירי פרטים טכניים!</div>', unsafe_allow_html=True)
 
 # תפריט צד (Sidebar) להגדרות
 with st.sidebar:
@@ -47,32 +47,27 @@ with st.sidebar:
     api_key_input = st.text_input("הכנס מפתח Google Gemini API Key", type="password", help="ניתן להשיג בחינם מ-Google AI Studio")
     
     st.markdown("---")
-    st.markdown("### 📋 סוג הסיכום המבוקש")
-    summary_type = st.selectbox(
-        "בחר פורמט סיכום",
-        ["סיכום מנהלים מקיף", "נקודות עיקריות ואקשן איטמס (Action Items)", "תמלול מלא עם תובנות", "סיכום לפי נושאים כרונולוגיים"]
+    st.markdown("### 📋 רמת הפירוט המבוקשת")
+    summary_depth = st.selectbox(
+        "בחר עומק לסיכום",
+        [
+            "סיכום מורחב ומעמיק במיוחד (כולל פסקאות מלאות, הסברים טכניים ודוגמאות)",
+            "סיכום כרונולוגי לפי סדר ההרצאה (מהדקה הראשונה ועד הסוף)",
+            "סיכום טכני מלא + שאלות ותשובות שעלו מהקהל"
+        ]
     )
 
 # טאבים ראשיים
-tab1, tab2 = st.tabs(["🚀 העלאה וניתוח", "📖 הסבר והוראות הרצה"])
+tab1, tab2, tab3 = st.tabs(["🚀 העלאת קובץ להפקה מורחבת", "🎙️ הקלטה חיה מהמיקרופון", "📖 הסבר והוראות"])
 
 with tab1:
-    col1, col2 = st.columns([1, 1], gap="large")
+    st.markdown("### 📥 העלאת הקלטה קיימת")
+    uploaded_file = st.file_uploader("בחר קובץ אודיו (MP3, WAV) או וידאו (MP4)", type=["mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "m4a"])
     
-    with col1:
-        st.markdown("### 📥 העלאת הקלטה")
-        st.info("💡 בחר קובץ מהמחשב (מומלץ קובץ MP3 שהמרת).")
-        
-        uploaded_file = st.file_uploader("בחר קובץ וידאו או אודיו", type=["mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "m4a"])
-        
-    with col2:
-        st.markdown("### 🤖 עיבוד וסיכום באמצעות AI")
-        
-        if st.button("התחל ניתוח וסיכום פגישה", type="primary", use_container_width=True):
+    if uploaded_file is not None:
+        if st.button("התחל ניתוח עומק והפקת סיכום מורחב", type="primary", use_container_width=True):
             if not api_key_input:
                 st.error("אנא הכנס מפתח API של Google Gemini בסיידבר הימני.")
-            elif uploaded_file is None:
-                st.warning("אנא בחר או העלה קובץ וידאו או אודיו תחילה.")
             else:
                 try:
                     client = genai.Client(api_key=api_key_input)
@@ -85,37 +80,38 @@ with tab1:
                     gemini_file = client.files.upload(file=temp_path)
                     st.success("הקובץ הועלה בהצלחה!")
                     
-                    st.info("🧠 מנתח את ההקלטה באמצעות המודל הנדרש...")
+                    st.info("🧠 מנתח את ההקלטה בניתוח מעמיק (דורש עיבוד נתונים מלא ללא קיצורים)...")
                     
+                    # פרומפט "מפלצתי" שמכריח את המודל לכתוב בהרחבה מרבית
                     prompt = f"""
-                    אתה עוזר אישי מקצועי וחכם. ניתנת לך הקלטת פגישת זום (וידאו ואודיו).
-                    אנא צור עבורי סיכום מקיף ברור ומקצועי בעברית לפי הסגנון הבא: {summary_type}.
+                    אתה מרצה מומחה, מתעד טכנולוגי וכותב תוכן מקצועי. הובאה בפניך הקלטת שיעור/פגישה מלאה.
+                    מטרתך היא לכתוב **סיכום ארוך, מפורט מאוד, עשיר בתוכן ובבשר טכני**, ולא סיכום קצר או שטחי. 
                     
-                    הסיכום צריך לכלול:
-                    1. **סקירה כללית של הפגישה** (נושא מרכזי, משתתפים ומטרת הפגישה).
-                    2. **נקודות מרכזיות שנדונו** (מחולקות לנושאים).
-                    3. **החלטות משמעותיות שהתקבלו**.
-                    4. **משימות לביצוע (Action Items)** כולל לוחות זמנים ואחראים אם צוינו בשיחה או הוצגו על המסך.
-                    5. **תובנות ויזואליות חשובות** (שקופיות, גרפים או נתונים מרכזיים שהוצגו במהלך הפגישה).
+                    השתמש ברמת פירוט גבוהה מאוד (בסגנון של סיכום מחברת בחינה מלא של סטודנט מצטיין). הקפד לכלול:
                     
-                    כתוב בצורה נקייה, מסודרת, מקצועית, עם כותרות בולטות.
+                    1. **מבוא והקשר מפורט:** רקע מלא על הנושאים שפותחו בתחילת השיעור, מטרת המפשג, והמונחים המרכזיים שהוצגו.
+                    2. **גוף הסיכום (ניתוח מודולרי מלא):** פרק כל נושא שנדון בהרחבה. אל תסתפק בכותרות קצרות – כתוב פסקאות הסבר מלאות על כל מושג, תהליך, הגדרה ארכיטקטונית או דוגמה מעשית שהמרצה הציג. הוסף את כל ההקשרים והניואנסים שעלו.
+                    3. **דיונים, שאלות ותשובות:** אם היו שאלות של משתתפים במהלך השיעור והתשובות עליהן, פרט אותן במלואן כחלק מההבנה הטכנית.
+                    4. **כללים, הנחיות עבודה וזהב (Best Practices):** כל טיפ מעשי, אזהרה או כלל ברזל שהוזכר בשיעור (למשל בנוגע לאבטחה, תצורות או ניהול משאבים).
+                    5. **משימות, תרגילים ומעבדות (Action Items):** רשימה מלאה של כל מה שהוגדר לביצוע עתידי, כולל דגשים לתרגילי בית.
+                    
+                    סגנון הכתיבה צריך להיות מקצועי, קריא מאוד, מחולק היטב לכותרות ותת-כותרות, פסקאות מפורטות, וטבלאות היכן שזה מוסיף ערך. אל תחסוך במילים ובמידע!
                     """
                     
-                    # שימוש מפורט במודל gemini-3.6-flash לפי דרישת שרת גוגל
                     response = client.models.generate_content(
                         model='gemini-3.6-flash',
                         contents=[gemini_file, prompt]
                     )
                     
-                    st.success("הניתוח והסיכום הושלמו בהצלחה!")
+                    st.success("הסיכום המורחב הופק בהצלחה!")
                     st.markdown("---")
-                    st.markdown("### 📝 תוצאות הסיכום")
+                    st.markdown("### 📝 תוצאות הסיכום המעמיק")
                     st.markdown(response.text)
                     
                     st.download_button(
-                        label="📥 הורד סיכום כקובץ טקסט",
+                        label="📥 הורד סיכום מורחב כמסמך טקסט",
                         data=response.text,
-                        file_name="zoom_meeting_summary.txt",
+                        file_name="deep_detailed_summary.txt",
                         mime="text/plain"
                     )
                     
@@ -126,7 +122,59 @@ with tab1:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
 
 with tab2:
-    st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. בחר קובץ מהמחשב בלחיצת כפתור פשוטה.")
-    st.markdown("2. הזן את מפתח ה-API שלך בצד ימין.")
-    st.markdown("3. לחץ על כפתור התחלת ניתוח והתן למערכת לסכם עבורך אוטומטית.")
+    st.markdown("### 🎙️ הקלטה חיה מהמיקרופון")
+    st.info("💡 הקלט הרצאה או שיחה ישירות מהמיקרופון וקבל סיכום מעמיק בהתאם.")
+    
+    audio_value = st.audio_input("הקלט שיעור חי")
+    
+    if audio_value is not None:
+        st.audio(audio_value)
+        if st.button("סכם את ההקלטה החיה בניתוח עומק", type="primary", use_container_width=True):
+            if not api_key_input:
+                st.error("אנא הכנס מפתח API של Google Gemini בסיידבר הימני.")
+            else:
+                try:
+                    client = genai.Client(api_key=api_key_input)
+                    
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+                        tmp_file.write(audio_value.getvalue())
+                        temp_audio_path = tmp_file.name
+                    
+                    st.info("📤 מעלה את ההקלטה החיה...")
+                    gemini_audio_file = client.files.upload(file=temp_audio_path)
+                    st.success("ההקלטה הועלתה בהצלחה!")
+                    
+                    st.info("🧠 מנתח את ההקלטה החיה לעומק...")
+                    
+                    prompt_audio = f"""
+                    אתה מתעד טכנולוגי מקצועי. ניתנת לך הקלטת אודיו של שיעור. 
+                    אנא הפק סיכום ארוך, מפורט, עשיר בתוכן ובמושגים טכניים, הכולל פסקאות הסבר מלאות, כללים מרכזיים ומשימות לביצוע. אל תצמצם בפרטים!
+                    """
+                    
+                    response_audio = client.models.generate_content(
+                        model='gemini-3.6-flash',
+                        contents=[gemini_audio_file, prompt_audio]
+                    )
+                    
+                    st.success("הסיכום המורחב הושלם!")
+                    st.markdown("---")
+                    st.markdown("### 📝 תוצאות הסיכום החי")
+                    st.markdown(response_audio.text)
+                    
+                    st.download_button(
+                        label="📥 הורד סיכום חי מורחב",
+                        data=response_audio.text,
+                        file_name="live_deep_summary.txt",
+                        mime="text/plain"
+                    )
+                    
+                    if os.path.exists(temp_audio_path):
+                        os.remove(temp_audio_path)
+                        
+                except Exception as e:
+                    st.error(f"אירעה שגיאה: {e}")
+
+with tab3:
+    st.markdown("### 📖 מדריך למשתמש")
+    st.markdown("1. המערכת מוגדרת כעת למצב **'ניתוח עומק מקסימלי'**.")
+    st.markdown("2. הפרומפט החדש מחייב את המודל לכתוב פסקאות ארוכות, לפרט על כל מונח טכני ולתת סיכום רחב בדומה למחברת שיעור של סטודנט.")

@@ -101,9 +101,9 @@ with tab1:
                     כתוב בצורה נקייה, מסודרת, מקצועית, עם כותרות בולטות.
                     """
                     
-                    # שימוש במודל Pro העדכני
+                    # שימוש במודל gemini-2.5-flash התקני
                     response = client.models.generate_content(
-                        model='gemini-2.5-pro',
+                        model='gemini-2.5-flash',
                         contents=[gemini_file, prompt]
                     )
                     

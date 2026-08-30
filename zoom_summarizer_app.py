@@ -53,7 +53,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.info("💡 **טיפ:** מודל Gemini 1.5 Pro תומך בקבצי וידאו ואודיו ארוכים במיוחד באופן ישיר!")
+    st.info("💡 **טיפ:** המודל החדש תומך בקבצי וידאו ואודיו ארוכים במיוחד באופן ישיר!")
 
 # טאבים ראשיים באפליקציה
 tab1, tab2 = st.tabs(["🚀 העלאה וניתוח", "📖 הסבר והוראות הרצה"])
@@ -110,7 +110,7 @@ with tab1:
                         """
                         
                         response = client.models.generate_content(
-                            model='gemini-1.5-pro',
+                            model='gemini-2.5-flash',
                             contents=[gemini_file, prompt]
                         )
                         

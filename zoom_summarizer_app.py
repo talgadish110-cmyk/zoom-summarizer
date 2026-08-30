@@ -85,7 +85,7 @@ with tab1:
                     gemini_file = client.files.upload(file=temp_path)
                     st.success("הקובץ הועלה בהצלחה!")
                     
-                    st.info("🧠 מנתח את ההקלטה באמצעות המודל העדכני...")
+                    st.info("🧠 מנתח את ההקלטה באמצעות המודל הנדרש...")
                     
                     prompt = f"""
                     אתה עוזר אישי מקצועי וחכם. ניתנת לך הקלטת פגישת זום (וידאו ואודיו).
@@ -101,9 +101,9 @@ with tab1:
                     כתוב בצורה נקייה, מסודרת, מקצועית, עם כותרות בולטות.
                     """
                     
-                    # שימוש במודל היציב gemini-2.0-flash
+                    # שימוש מפורט במודל gemini-3.6-flash לפי דרישת שרת גוגל
                     response = client.models.generate_content(
-                        model='gemini-2.0-flash',
+                        model='gemini-3.6-flash',
                         contents=[gemini_file, prompt]
                     )
                     

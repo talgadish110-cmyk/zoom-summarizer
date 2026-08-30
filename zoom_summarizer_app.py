@@ -1,4 +1,5 @@
 import os
+import time
 import streamlit as st
 import tempfile
 from google import genai
@@ -76,16 +77,15 @@ with tab1:
                 try:
                     client = genai.Client(api_key=api_key_input)
                     
-                    # שמירת הקובץ בתיקייה זמנית בצורה בטוחה
                     with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
                         tmp_file.write(uploaded_file.getvalue())
                         temp_path = tmp_file.name
                     
                     st.info("📤 מעלה את הקובץ לשרתי Google Gemini...")
                     gemini_file = client.files.upload(file=temp_path)
-                    st.success(f"הקובץ הועלה בהצלחה!")
+                    st.success("הקובץ הועלה בהצלחה!")
                     
-                    st.info("🧠 מנתח את ההקלטה באמצעות המודל...")
+                    st.info("🧠 מנתח את ההקלטה באמצעות המודל (מנסה להתחבר באופן אוטומטי אם יש עומס)...")
                     
                     prompt = f"""
                     אתה עוזר אישי מקצועי וחכם. ניתנת לך הקלטת פגישת זום (וידאו ואודיו).
@@ -101,24 +101,36 @@ with tab1:
                     כתוב בצורה נקייה, מסודרת, מקצועית, עם כותרות בולטות.
                     """
                     
-                    response = client.models.generate_content(
-                        model='gemini-3.6-flash',
-                        contents=[gemini_file, prompt]
-                    )
+                    # מנגנון ניסיון חוזר אוטומטי במקרה של עומס (503)
+                    response = None
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            response = client.models.generate_content(
+                                model='gemini-3.6-flash',
+                                contents=[gemini_file, prompt]
+                            )
+                            break
+                        except Exception as api_err:
+                            if "503" in str(api_err) and attempt < max_retries - 1:
+                                st.warning(f"השרת עמוס, מנסה שוב אוטומטית (ניסיון {attempt + 2}/{max_retries})...")
+                                time.sleep(3)
+                            else:
+                                raise api_err
                     
-                    st.success("הניתוח והסיכום הושלמו בהצלחה!")
-                    st.markdown("---")
-                    st.markdown("### 📝 תוצאות הסיכום")
-                    st.markdown(response.text)
+                    if response:
+                        st.success("הניתוח והסיכום הושלמו בהצלחה!")
+                        st.markdown("---")
+                        st.markdown("### 📝 תוצאות הסיכום")
+                        st.markdown(response.text)
+                        
+                        st.download_button(
+                            label="📥 הורד סיכום כקובץ טקסט",
+                            data=response.text,
+                            file_name="zoom_meeting_summary.txt",
+                            mime="text/plain"
+                        )
                     
-                    st.download_button(
-                        label="📥 הורד סיכום כקובץ טקסט",
-                        data=response.text,
-                        file_name="zoom_meeting_summary.txt",
-                        mime="text/plain"
-                    )
-                    
-                    # ניקוי הקובץ הזמני מהשרת המקומי
                     if os.path.exists(temp_path):
                         os.remove(temp_path)
                         

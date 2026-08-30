@@ -1,7 +1,6 @@
 import os
 import streamlit as st
 import tempfile
-import gdown
 from google import genai
 
 # הגדרת עמוד
@@ -39,7 +38,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">🎥 מערכת חכמה לסיכום הקלטות זום (וידאו ואודיו)</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">העלה הקלטת זום או הדבק קישור מ-Google Drive, ותן לבינה המלאכותית לסכם עבורך את כל מה שנאמר והוצג במסך!</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">העלה הקלטת זום מהמחשב או מהנייד, ותן לבינה המלאכותית לסכם עבורך את כל מה שנאמר והוצג במסך!</div>', unsafe_allow_html=True)
 
 # תפריט צד (Sidebar) להגדרות
 with st.sidebar:
@@ -54,7 +53,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.info("💡 **טיפ:** מודל Gemini 1.5 Pro תומך בקבצי וידאו ואודיו ארוכים במיוחד (עד שעתיים ויותר) באופן ישיר!")
+    st.info("💡 **טיפ:** מודל Gemini 1.5 Pro תומך בקבצי וידאו ואודיו ארוכים במיוחד באופן ישיר!")
 
 # טאבים ראשיים באפליקציה
 tab1, tab2 = st.tabs(["🚀 העלאה וניתוח", "📖 הסבר והוראות הרצה"])
@@ -63,49 +62,19 @@ with tab1:
     col1, col2 = st.columns([1, 1], gap="large")
     
     with col1:
-        st.markdown("### 📥 מקור הקובץ")
-        input_method = st.radio("בחר כיצד להזין את ההקלטה:", ["העלאת קובץ ישירות מהמחשב / נייד", "קישור מ-Google Drive (תמיכה בקבצים גדולים)"])
+        st.markdown("### 📥 העלאת הקלטה")
+        st.info("💡 מומלץ להעלות קבצי MP4. עבור קבצים גדולים (עד 2GB), אנא המתן בסבלנות עד שההעלאה תושלם במלואה.")
         
         video_file_path = None
         temp_dir = tempfile.mkdtemp()
         
-        if input_method == "העלאת קובץ ישירות מהמחשב / נייד":
-            uploaded_file = st.file_uploader("בחר קובץ וידאו (MP4, AVI, MOV) עד 2GB", type=["mp4", "mov", "avi", "mkv", "webm"])
-            if uploaded_file is not None:
-                video_file_path = os.path.join(temp_dir, uploaded_file.name)
-                with open(video_file_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.success("הקובץ הועלה בהצלחה!", icon="✅")
-                st.video(video_file_path)
-                
-        else:
-            drive_url = st.text_input("הדבק כאן קישור שיתוף ציבורי מ-Google Drive")
-            if drive_url:
-                if st.button("הורד קובץ מ-Google Drive"):
-                    with st.spinner("מוריד את הקובץ מ-Google Drive (עשוי לקחת מספר דקות לקבצים גדולים)... אנא המתן"):
-                        try:
-                            # חילוץ מזהה הקובץ מהקישור בצורה חכמה
-                            if "/d/" in drive_url:
-                                file_id = drive_url.split('/d/')[1].split('/')[0]
-                            elif "id=" in drive_url:
-                                file_id = drive_url.split('id=')[1].split('&')[0]
-                            else:
-                                raise ValueError("פורמט קישור לא תקין")
-                                
-                            video_file_path = os.path.join(temp_dir, "zoom_recording.mp4")
-                            
-                            # שימוש בפרמטרים עוקפי אזהרות גוגל לקבצים גדולים
-                            url = f'https://drive.google.com/uc?id={file_id}&export=download'
-                            gdown.download(url, video_file_path, quiet=False, fuzzy=True)
-                            
-                            if os.path.exists(video_file_path) and os.path.getsize(video_file_path) > 1000:
-                                st.success("הקובץ הורד בהצלחה!", icon="✅")
-                                st.video(video_file_path)
-                            else:
-                                raise Exception("הקובץ שהורד ריק או שאין הרשאות צפייה ציבוריות.")
-                        except Exception as e:
-                            st.error(f"שגיאה בהורדת הקובץ: {e}")
-                            st.info("💡 טיפ: ודא שהקובץ בדרייב מוגדר כציבורי ('Anyone with the link can view') ושאין לו הגבלת הורדה חריגה.")
+        uploaded_file = st.file_uploader("בחר קובץ וידאו (MP4, AVI, MOV) עד 2GB", type=["mp4", "mov", "avi", "mkv", "webm"])
+        if uploaded_file is not None:
+            video_file_path = os.path.join(temp_dir, uploaded_file.name)
+            with open(video_file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            st.success("הקובץ נטען בהצלחה לזיכרון הזמני!", icon="✅")
+            st.video(video_file_path)
 
     with col2:
         st.markdown("### 🤖 עיבוד וסיכום באמצעות AI")
@@ -114,13 +83,13 @@ with tab1:
             if not api_key_input:
                 st.error("אנא הכנס מפתח API של Google Gemini בסיידבר הימני.")
             elif not video_file_path or not os.path.exists(video_file_path):
-                st.warning("אנא בחר או העලා קובץ וידאו תחילה.")
+                st.warning("אנא בחר או העלה קובץ וידאו תחילה.")
             else:
                 try:
                     client = genai.Client(api_key=api_key_input)
                     
                     with st.status("מעבד את הקלטת הזום...", expanded=True) as status:
-                        st.write("📤 מעלה את קובץ המדיה לשרתי Google Gemini (הליך זה עשוי לקחת מספר דקות בהתאם לגודל הקובץ)...")
+                        st.write("📤 מעלה את קובץ המדיה לשרתי Google Gemini (קבצים גדולים עשויים לקחת מספר דקות)...")
                         
                         gemini_file = client.files.upload(file=video_file_path)
                         st.write(f"✅ הקובץ הועלה בהצלחה (מזהה: {gemini_file.name})")
@@ -164,5 +133,6 @@ with tab1:
 
 with tab2:
     st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. ודא שקובץ הדרישות `requirements.txt` מכיל את הספריות הנדרשות.")
-    st.markdown("2. האפליקציה תומכת כעת בהורדה חכמה של קבצים גדולים מ-Google Drive באמצעות פרמטרים עוקפי אזהרות.")
+    st.markdown("1. בחר קובץ וידאו מהמחשב או מהנייד (תומך בקבצים גדולים עד 2GB).")
+    st.markdown("2. הזן את מפתח ה-API שלך בצד ימין.")
+    st.markdown("3. לחץ על כפתור התחלת ניתוח והתן לבינה המלאכותית לסכם עבורך את הפגישה.")

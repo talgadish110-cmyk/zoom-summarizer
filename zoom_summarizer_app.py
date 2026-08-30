@@ -61,7 +61,7 @@ with tab1:
     
     with col1:
         st.markdown("### 📥 העלאת הקלטה")
-        st.info("💡 בחר קובץ מהמחשב. עבור קבצים גדולים, ההעלאה לשרת עשויה לקחת כמה רגעים.")
+        st.info("💡 בחר קובץ מהמחשב (מומלץ קובץ MP3 שהמרת).")
         
         uploaded_file = st.file_uploader("בחר קובץ וידאו או אודיו", type=["mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "m4a"])
         
@@ -85,7 +85,7 @@ with tab1:
                     gemini_file = client.files.upload(file=temp_path)
                     st.success("הקובץ הועלה בהצלחה!")
                     
-                    st.info("🧠 מנתח את ההקלטה באמצעות המודל (ממתין שהשרת יעבד את הקובץ בענן)...")
+                    st.info("🧠 מנתח את ההקלטה באמצעות מודל ה-Pro...")
                     
                     prompt = f"""
                     אתה עוזר אישי מקצועי וחכם. ניתנת לך הקלטת פגישת זום (וידאו ואודיו).
@@ -101,35 +101,23 @@ with tab1:
                     כתוב בצורה נקייה, מסודרת, מקצועית, עם כותרות בולטות.
                     """
                     
-                    # מנגנון ניסיון חוזר מורחב לעומסים ועיבוד קבצים
-                    response = None
-                    max_retries = 5
-                    for attempt in range(max_retries):
-                        try:
-                            response = client.models.generate_content(
-                                model='gemini-3.6-flash',
-                                contents=[gemini_file, prompt]
-                            )
-                            break
-                        except Exception as api_err:
-                            if "503" in str(api_err) and attempt < max_retries - 1:
-                                st.warning(f"השרת מעבד את הקובץ או עמוס, ממתין 15 שניות ומנסה שוב (ניסיון {attempt + 2}/{max_retries})...")
-                                time.sleep(15)
-                            else:
-                                raise api_err
+                    # שימוש במודל Pro היציב
+                    response = client.models.generate_content(
+                        model='gemini-1.5-pro',
+                        contents=[gemini_file, prompt]
+                    )
                     
-                    if response:
-                        st.success("הניתוח והסיכום הושלמו בהצלחה!")
-                        st.markdown("---")
-                        st.markdown("### 📝 תוצאות הסיכום")
-                        st.markdown(response.text)
-                        
-                        st.download_button(
-                            label="📥 הורד סיכום כקובץ טקסט",
-                            data=response.text,
-                            file_name="zoom_meeting_summary.txt",
-                            mime="text/plain"
-                        )
+                    st.success("הניתוח והסיכום הושלמו בהצלחה!")
+                    st.markdown("---")
+                    st.markdown("### 📝 תוצאות הסיכום")
+                    st.markdown(response.text)
+                    
+                    st.download_button(
+                        label="📥 הורד סיכום כקובץ טקסט",
+                        data=response.text,
+                        file_name="zoom_meeting_summary.txt",
+                        mime="text/plain"
+                    )
                     
                     if os.path.exists(temp_path):
                         os.remove(temp_path)

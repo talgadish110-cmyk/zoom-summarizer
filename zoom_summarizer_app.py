@@ -73,8 +73,7 @@ with tab1:
             video_file_path = os.path.join(temp_dir, uploaded_file.name)
             with open(video_file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-            st.success("הקובץ נטען בהצלחה לזיכרון הזמני!", icon="✅")
-            st.video(video_file_path)
+            st.success("הקובץ נטען בהצלחה לזיכרון הזמני ומוכן לניתוח!", icon="✅")
 
     with col2:
         st.markdown("### 🤖 עיבוד וסיכום באמצעות AI")
@@ -133,6 +132,6 @@ with tab1:
 
 with tab2:
     st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. בחר קובץ וידאו מהמחשב או מהנייד (תומך בקבצים גדולים עד 2GB).")
+    st.markdown("1. בחר קובץ וידאו מהמחשב או מהנייד (תומך בקבצים גדולים).")
     st.markdown("2. הזן את מפתח ה-API שלך בצד ימין.")
     st.markdown("3. לחץ על כפתור התחלת ניתוח והתן לבינה המלאכותית לסכם עבורך את הפגישה.")

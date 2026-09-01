@@ -98,7 +98,6 @@ with tab1:
                     file_bytes = uploaded_file.getvalue()
                     mime_type = uploaded_file.type if uploaded_file.type else "audio/mp3"
                     
-                    # המרה ל-Base64 לשליחה ישירה בבקשת HTTP
                     import base64
                     base64_audio = base64.b64encode(file_bytes).decode("utf-8")
 
@@ -112,8 +111,8 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
-                    # שימוש ישיר ב-REST API של gemini-2.5-flash עם המפתח שלך
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    # התאמת כתובת ה-API למפתחות ניהוליים (Bearer Token / Authorization Header או שימוש כטוקן גישה)
+                    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
                     
                     payload = {
                         "contents": [
@@ -131,10 +130,20 @@ with tab1:
                         ]
                     }
 
-                    headers = {"Content-Type": "application/json"}
+                    # שליחת המפתח כ-Bearer token שמתאים למפתחות ניהול ענן
+                    headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}"
+                    }
                     
                     response = requests.post(url, headers=headers, data=json.dumps(payload))
                     
+                    # אם המפתח דורש העברה בפרמטר רגיל ננסה גם גיבוי
+                    if response.status_code == 401:
+                        url_alt = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                        headers_alt = {"Content-Type": "application/json"}
+                        response = requests.post(url_alt, headers=headers_alt, data=json.dumps(payload))
+
                     if response.status_code == 200:
                         res_json = response.json()
                         summary_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
@@ -151,7 +160,7 @@ with tab1:
                             mime="text/plain",
                         )
                     else:
-                        st.error(f"שגיאת שרת מ-Google API: {response.text}")
+                        st.error(f"שגיאת שרת מ-Google API ({response.status_code}): {response.text}")
 
                 except Exception as e:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")

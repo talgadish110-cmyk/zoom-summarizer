@@ -1,9 +1,10 @@
 import os
 import streamlit as st
+from groq import Groq
 from streamlit_mic_recorder import mic_recorder
 
 st.set_page_config(
-    page_title="מערכת סיכום הקלטות זום ומיקרופון",
+    page_title="מערכת תמלול וסיכום שיעורים אמיתית",
     page_icon="🎙️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -38,17 +39,27 @@ st.markdown(
 )
 
 st.markdown(
-    '<div class="main-header">🎙️ מערכת חכמה לסיכום פגישות והקלטות</div>',
+    '<div class="main-header">🎙️ מערכת תמלול וסיכום שיעורים אמיתית (Whisper)</div>',
     unsafe_allow_html=True,
 )
 st.markdown(
-    '<div class="sub-header">מערכת מקומית לניתוח וסיכום קבצי זום והקלטות קוליות!</div>',
+    '<div class="sub-header">המערכת מאזינה לקובץ האודיו שלך מילה במילה, מתמללת אותו, ומסכמת אך ורק את מה שנאמר בשיעור!</div>',
     unsafe_allow_html=True,
 )
 
+# שליפת מפתח Groq מתוך ה-Secrets
+secret_groq_key = st.secrets.get("GROQ_API_KEY", "")
+
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
-    st.success("מצב עבודה מקומי פעיל (ללא תלות במפתחות API חיצוניים).")
+    api_key = st.text_input(
+        "הכנס מפתח Groq API (מתחיל ב-gsk_)", value=secret_groq_key, type="password"
+    )
+    
+    if api_key:
+        st.success("מפתח ה-API מוגדר במערכת.")
+    else:
+        st.warning("נא להזין מפתח Groq.")
 
     st.markdown("---")
     st.markdown("### 📋 סוג הסיכום המבוקש")
@@ -63,7 +74,7 @@ with st.sidebar:
         ],
     )
 
-tab1, tab2, tab3 = st.tabs(["📁 העלאת קובץ (MP3/WAV)", "🎙️ הקלטה ישירה מהמיקרופון", "📖 הוראות"])
+tab1, tab2 = st.tabs(["📁 העלאת קובץ שיעור (MP3/WAV/M4A)", "🎙️ הקלטה ישירה מהמיקרופון"])
 
 with tab1:
     col1, col2 = st.columns([1, 1], gap="large")
@@ -71,68 +82,98 @@ with tab1:
     with col1:
         st.markdown("### 📥 העלאת קובץ מהמחשב")
         uploaded_file = st.file_uploader(
-            "בחר קובץ אודיו (MP3 או WAV)",
-            type=["mp3", "wav", "m4a"],
+            "בחר קובץ אודיו (MP3, WAV, M4A)",
+            type=["mp3", "wav", "m4a", "mp4", "mpeg"],
         )
         if uploaded_file:
-            st.info(f"📁 קובץ נטען בהצלחה: {uploaded_file.name} ({uploaded_file.size / (1024*1024):.2f} MB)")
+            st.info(f"📁 קובץ נטען: {uploaded_file.name} ({uploaded_file.size / (1024*1024):.2f} MB)")
 
     with col2:
-        st.markdown("### 🤖 עיבוד וסיכום (מקובץ)")
+        st.markdown("### 🤖 תמלול וסיכום אמיתי")
 
-        if st.button("התחל ניתוח וסיכום פגישה", type="primary", key="btn_file"):
-            if uploaded_file is None:
+        if st.button("התחל תמלול וניתוח ההקלטה", type="primary", key="btn_file"):
+            if not api_key:
+                st.error("אנא הכנס מפתח Groq API בסרגל הצד או ב-Secrets.")
+            elif uploaded_file is None:
                 st.warning("אנא בחר או העלה קובץ אודיו תחילה.")
             else:
                 try:
-                    with st.spinner("🔄 מעבד את הקובץ ומייצר סיכום מקצועי..."):
-                        # סימולציה/עיבוד מקומי מתקדם שמנתח את מבנה הקובץ ומייצר סיכום לפי הפורמט הנבחר
-                        file_name = uploaded_file.name
-                        file_size_mb = uploaded_file.size / (1024 * 1024)
+                    client = Groq(api_key=api_key)
+                    
+                    # שמירת קובץ זמני
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_path = tmp_file.name
+
+                    st.info("🔄 שלב 1/2: שולח את קובץ האודיו לתמלול חכם (Whisper)... פעולה זו עשויה לקחת דקה לקבצים גדולים.")
+
+                    # תמלול אמיתי דרך Whisper
+                    with open(tmp_path, "rb") as audio_file:
+                        transcription_obj = client.audio.transcriptions.create(
+                            file=(uploaded_file.name, audio_file.read()),
+                            model="whisper-large-v3",
+                            prompt="השיעור מתנהל בעברית. נא לתמלל בעברית בצורה מדויקת ומלאה.",
+                            response_format="text",
+                            language="he"
+                        )
+                    
+                    os.unlink(tmp_path)
+                    transcribed_text = transcription_obj
+                    
+                    if not transcribed_text or len(transcribed_text.strip()) < 3:
+                        st.error("לא זוהה דיבור ברור בקובץ. ודא שהקובץ מכיל אודיו תקין.")
+                    else:
+                        st.info("🧠 שלב 2/2: מעבד את הטקסט המתומלל ומייצר סיכום מדויק לשיעור...")
+
+                        # סיכום מבוסס תמלול אמיתי בלבד דרך Llama 3
+                        summary_prompt = f"""
+                        להלן תמלול מדויק של שיעור או פגישה שהתקיימה:
+                        ---
+                        {transcribed_text}
+                        ---
                         
-                        summary_text = f"""
-### 📊 דוח סיכום פגישה / שיעור
-* **שם הקובץ המנותח:** {file_name}
-* **גודל הקובץ:** {file_size_mb:.2f} מגה-בייט
-* **פורמט סיכום מבוקש:** {summary_type}
+                        על בסיס התמלול הזה בלבד, צור עבורי סיכום מקצועי ומפורט בעברית לפי הפורמט הבא: {summary_type}.
+                        הקפד להציג אך ורק את התכנים, המושגים והנושאים שהוזכרו במפורש בתמלול, ואל תמציא פרטים חיצוניים.
+                        """
 
----
+                        chat_completion = client.chat.completions.create(
+                            messages=[
+                                {
+                                    "role": "system",
+                                    "content": "אתה עוזר אקדמי מקצועי שמסכם הרצאות אך ורק על סמך התמלול האמיתי שסופק.",
+                                },
+                                {
+                                    "role": "user",
+                                    "content": summary_prompt,
+                                }
+                            ],
+                            model="llama-3.3-70b-versatile",
+                        )
 
-#### 🎯 נקודות מרכזיות שעלו בדיון:
-1. **סקירת פתיחה ומטרות:** הוצגו הנושאים המרכזיים שעל הפרק, תוך התמקדות ביעדי הפרויקט והשלבים הקרובים.
-2. **ניתוח טכני / אופרטיבי:** בוצע מעבר על נתוני התשתית, הקונפיגורציות ודגשים קריטיים לעבודה שוטפת.
-3. **החלטות מרכזיות:**
-   - הוגדרו לוחות זמנים ברורים לביצוע המשימות.
-   - סוכם על שיתוף פעולה הדוק בין הצדדים והעברת מסמכי תיעוד מסודרים.
+                        summary_text = chat_completion.choices[0].message.content
 
-#### ✅ משימות להמשך טיפול (Action Items):
-* [ ] להשלים את הגדרת הרשת והבדיקות בסביבת העבודה (אחריות: צוות טכני).
-* [ ] להכין דוח מעקב שבועי ולעדכן את כלל המעורבים.
-* [ ] לבצע בדיקת תקינות סופית לקבצי ההקלטה והגיבויים.
+                        st.success("השיעור התומלל וסוכם בהצלחה מלאה!")
+                        
+                        st.markdown("---")
+                        st.markdown("### 📝 תוצאות הסיכום לשיעור")
+                        st.markdown(summary_text)
 
----
-*הופק אוטומטית על ידי מערכת הסיכום המקומית.*
-"""
+                        with st.expander("🔍 הצג את התמלול המלא (מה המרצה אמר מילה במילה)"):
+                            st.write(transcribed_text)
 
-                    st.success("הניתוח והסיכום הושלמו בהצלחה!")
-                    st.markdown("---")
-                    st.markdown("### 📝 תוצאות הסיכום")
-                    st.markdown(summary_text)
-
-                    st.download_button(
-                        label="📥 הורד סיכום כקובץ טקסט",
-                        data=summary_text,
-                        file_name="meeting_summary.txt",
-                        mime="text/plain",
-                    )
+                        st.download_button(
+                            label="📥 הורד סיכום כקובץ טקסט",
+                            data=summary_text,
+                            file_name="lesson_summary.txt",
+                            mime="text/plain",
+                        )
 
                 except Exception as e:
-                    st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
+                    st.error(f"אירעה שגיאה בתהליך התמלול: {e}")
 
 with tab2:
     st.markdown("### 🎙️ הקלטה קולית חיה")
-    st.markdown("לחץ על כפתור ההקלטה למטה, דבר אל המיקרופון, ולחץ עצירה בסיום:")
-
     audio_recorded = mic_recorder(
         start_prompt="🔴 התחל הקלטה",
         stop_prompt="⏹️ עצור הקלטה",
@@ -143,34 +184,45 @@ with tab2:
     if audio_recorded:
         st.audio(audio_recorded['bytes'], format='audio/wav')
         
-        if st.button("נתח וסכם את ההקלטה הקולית", type="primary", key="btn_mic"):
-            with st.spinner("🔄 מעבד את ההקלטה הקולית..."):
-                summary_text = f"""
-### 🎙️ סיכום הקלטה קולית חיה
-* **פורמט מבוקש:** {summary_type}
+        if st.button("תמלל וסכם הקלטה חיה", type="primary", key="btn_mic"):
+            if not api_key:
+                st.error("אנא הכנס מפתח Groq API בסרגל הצד.")
+            else:
+                try:
+                    client = Groq(api_key=api_key)
+                    st.info("🔄 מתמלל את ההקלטה שלך...")
 
----
-#### עיקרי הדברים מההקלטה:
-ההקלטה הקולית שנקלטה דרך המיקרופון נותחה בהצלחה. להלן התובנות והנושאים שהועלו בה:
-1. **נושא מרכזי:** הודגשו הבקשות המרכזיות וסדר היום שעלה בשיחה.
-2. **הסקת מסקנות:** הובהרו הנקודות הדורשות מעקב מהיר.
+                    transcription_obj = client.audio.transcriptions.create(
+                        file=("mic_audio.wav", audio_recorded['bytes']),
+                        model="whisper-large-v3",
+                        response_format="text",
+                        language="he"
+                    )
 
-*הופק אוטומטית בהצלחה.*
-"""
-                st.success("ההקלטה סוכמה בהצלחה!")
-                st.markdown("---")
-                st.markdown("### 📝 תוצאות הסיכום מהמיקרופון")
-                st.markdown(summary_text)
+                    transcribed_text = transcription_obj
 
-                st.download_button(
-                    label="📥 הורד סיכום כקובץ טקסט",
-                    data=summary_text,
-                    file_name="mic_summary.txt",
-                    mime="text/plain",
-                    key="download_mic"
-                )
+                    summary_prompt = f"""
+                    להלן תמלול של הקלטה קולית:
+                    ---
+                    {transcribed_text}
+                    ---
+                    סכם את התוכן בעברית לפי הפורמט: {summary_type}.
+                    """
 
-with tab3:
-    st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. המערכת פועלת במצב מקומי ואינה דורשת מפתחות API חיצוניים או הגדרות ענן מסובכות.")
-    st.markdown("2. העלה קובץ אודיו בכל גודל (גם קבצים גדולים כמו 132MB) או הקלט ישירות דרך הלשונית.")
+                    chat_completion = client.chat.completions.create(
+                        messages=[{"role": "user", "content": summary_prompt}],
+                        model="llama-3.3-70b-versatile",
+                    )
+
+                    summary_text = chat_completion.choices[0].message.content
+
+                    st.success("ההקלטה סוכמה בהצלחה!")
+                    st.markdown("---")
+                    st.markdown("### 📝 תוצאות הסיכום")
+                    st.markdown(summary_text)
+
+                    with st.expander("🔍 הצג את התמלול המלא"):
+                        st.write(transcribed_text)
+
+                except Exception as e:
+                    st.error(f"שגיאה: {e}")

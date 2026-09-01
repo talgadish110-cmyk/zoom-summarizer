@@ -1,8 +1,7 @@
 import os
-import time
+import tempfile
 from google import genai
 import streamlit as st
-import tempfile
 
 # הגדרת עמוד
 st.set_page_config(
@@ -46,8 +45,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown(
-    '<div class="sub-header">העלה הקלטת זום מהמחשב או מהנייד, ותן לבינה המלאכותית'
-    " לסכם עבורך את כל מה שנאמר!</div>",
+    '<div class="sub-header">העלה הקלטה (MP4, MP3 ועוד) או הקלט בשידור חי מהמיקרופון, ותן לבינה המלאכותית לסכם עבורך את הכל!</div>',
     unsafe_allow_html=True,
 )
 
@@ -65,6 +63,7 @@ with st.sidebar:
     summary_type = st.selectbox(
         "בחר פורמט סיכום",
         [
+            "סיכום מלא מהתחלה ועד הסוף (מפורט ורציף)",
             "סיכום מנהלים מקיף",
             "נקודות עיקריות ואקשן איטמס (Action Items)",
             "תמלול מלא עם תובנות",
@@ -72,25 +71,25 @@ with st.sidebar:
         ],
     )
 
-# טאבים ראשיים
-tab1, tab2 = st.tabs(["🚀 העלאה וניתוח", "📖 הסבר והוראות הרצה"])
+# טאבים ראשיים: העלאת קובץ מול הקלטה חיה
+tab1, tab2, tab3 = st.tabs(
+    ["📁 העלאת קובץ (MP4/MP3)", "🎤 הקלטה חיה מהמיקרופון", "📖 הסבר והוראות הרצה"]
+)
 
 with tab1:
     col1, col2 = st.columns([1, 1], gap="large")
 
     with col1:
-        st.markdown("### 📥 העלאת הקלטה")
-        st.info("💡 בחר קובץ מהמחשב (מומלץ קובץ MP3 שהמרת).")
-
+        st.markdown("### 📥 העלאת קובץ מהמחשב")
         uploaded_file = st.file_uploader(
             "בחר קובץ וידאו או אודיו",
             type=["mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "m4a"],
         )
 
     with col2:
-        st.markdown("### 🤖 עיבוד וסיכום באמצעות AI")
+        st.markdown("### 🤖 עיבוד וסיכום (מקובץ)")
 
-        if st.button("התחל ניתוח וסיכום פגישה", type="primary", use_container_width=True):
+        if st.button("התחל ניתוח וסיכום פגישה", type="primary", key="btn_file"):
             if not api_key_input:
                 st.error("אנא הכנס מפתח API של Google Gemini בסיידבר הימני.")
             elif uploaded_file is None:
@@ -98,7 +97,6 @@ with tab1:
             else:
                 try:
                     client = genai.Client(api_key=api_key_input)
-
                     file_extension = uploaded_file.name.split(".")[-1]
                     with tempfile.NamedTemporaryFile(
                         delete=False, suffix=f".{file_extension}"
@@ -112,23 +110,15 @@ with tab1:
                     )
                     st.success("הקובץ הועלה בהצלחה!")
 
-                    st.info("🧠 מנתח את ההקלטה באמצעות המודל הנדרש...")
+                    st.info("🧠 מנתח את ההקלטה...")
 
                     prompt = f"""
-                    אתה עוזר אישי מקצועי וחכם. ניתנת לך הקלטת פגישת זום (וידאו ואודיו).
-                    אנא צור עבורי סיכום מקיף ברור ומקצועי בעברית לפי הסגנון הבא: {summary_type}.
-                    
-                    הסיכום צריך לכלול:
-                    1. **סקירה כללית של הפגישה** (נושא מרכזי, משתתפים ומטרת הפגישה).
-                    2. **נקודות מרכזיות שנדונו** (מחולקות לנושאים).
-                    3. **החלטות משמעותיות שהתקבלו**.
-                    4. **משימות לביצוע (Action Items)** כולל לוחות זמנים ואחראים אם צוינו בשיחה או הוצגו על המסך.
-                    5. **תובנות ויזואליות חשובות** (שקופיות, גרפים או נתונים מרכזיים שהוצגו במהלך הפגישה).
-                    
-                    כתוב בצורה נקייה, מסודרת, מקצועית, עם כותרות בולטות.
+                    אתה עוזר אישי מקצועי וחכם. ניתנת לך הקלטת פגישה (וידאו או אודיו).
+                    אנא צור עבורי סיכום לפי הפורמט הבא: {summary_type}.
+                    אם נבחר סיכום מלא מהתחלה ועד הסוף, סקור את כל מהלך הפגישה בסדר כרונולוגי מפורט מהדקה הראשונה ועד הסוף, כולל כל השלבים, הדיונים וההחלטות בצורה מלאה ולא מקוצרת.
+                    כתוב בצורה נקייה, מסודרת ומקצועית בעברית.
                     """
 
-                    # שימוש במודל היציב gemini-2.0-flash
                     response = client.models.generate_content(
                         model="gemini-2.0-flash", contents=[gemini_file, prompt]
                     )
@@ -141,7 +131,7 @@ with tab1:
                     st.download_button(
                         label="📥 הורד סיכום כקובץ טקסט",
                         data=response.text,
-                        file_name="zoom_meeting_summary.txt",
+                        file_name="meeting_summary.txt",
                         mime="text/plain",
                     )
 
@@ -152,9 +142,72 @@ with tab1:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
 
 with tab2:
-    st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. בחר קובץ מהמחשב בלחיצת כפתור פשוטה.")
-    st.markdown("2. הזן את מפתח ה-API שלך בצד ימין.")
-    st.markdown(
-        "3. לחץ על כפתור התחלת ניתוח והתן למערכת לסכם עבורך אוטומטית."
+    st.markdown("### 🎙️ הקלטה חיה מהמיקרופון")
+    st.info(
+        "לחץ על כפתור ההקלטה בדפדפן כדי להקליט שיחה או פגישה בזמן אמת."
     )
+
+    # רכיב ההקלטה המובנה ב-Streamlit
+    audio_value = st.audio_input("הקלט קול מהמיקרופון")
+
+    if audio_value is not None:
+        st.audio(audio_value)
+
+        if st.button(
+            "נתח והפק סיכום להקלטה החיה", type="primary", key="btn_mic"
+        ):
+            if not api_key_input:
+                st.error("אנא הכנס מפתח API של Google Gemini בסיידבר הימני.")
+            else:
+                try:
+                    client = genai.Client(api_key=api_key_input)
+
+                    with tempfile.NamedTemporaryFile(
+                        delete=False, suffix=".wav"
+                    ) as tmp_file:
+                        tmp_file.write(audio_value.getvalue())
+                        temp_path = tmp_file.name
+
+                    st.info("📤 מעלה את ההקלטה לשרתי Google Gemini...")
+                    gemini_file = client.files.upload(
+                        file=temp_path, mime_type="audio/wav"
+                    )
+                    st.success("ההקלטה הועלתה בהצלחה!")
+
+                    st.info("🧠 מנתח את ההקלטה החיה...")
+
+                    prompt = f"""
+                    הקלטה זו בוצעה בשידור חי דרך מיקרופון. אנא צור עבורה סיכום מפורט ומקצועי בעברית בהתאם לבחירה: {summary_type}.
+                    אם נבחר סיכום מלא מהתחלה ועד הסוף, הצג סקירה רציפה ומלאה של כל מה שנאמר מהמילה הראשונה ועד האחרונה.
+                    """
+
+                    response = client.models.generate_content(
+                        model="gemini-2.0-flash", contents=[gemini_file, prompt]
+                    )
+
+                    st.success("הסיכום הושלם בהצלחה!")
+                    st.markdown("---")
+                    st.markdown("### 📝 תוצאות הסיכום")
+                    st.markdown(response.text)
+
+                    st.download_button(
+                        label="📥 הורד סיכום כקובץ טקסט",
+                        data=response.text,
+                        file_name="live_recording_summary.txt",
+                        mime="text/plain",
+                    )
+
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+                except Exception as e:
+                    st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
+
+with tab3:
+    st.markdown("### 📖 מדריך הרצה מהיר")
+    st.markdown("1. בחר קובץ (MP4, MP3 וכו') או עבור לטאב ההקלטה החיה.")
+    st.markdown("2. הזן את מפתח ה-API שלך בסיידבר הימני.")
+    st.markdown(
+        "3. בחר את פורמט הסיכום הרצוי (כמו סיכום מלא מהתחלה ועד הסוף)."
+    )
+    st.markdown("4. לחץ על כפתור הניתוח והמתן לתוצאה.")

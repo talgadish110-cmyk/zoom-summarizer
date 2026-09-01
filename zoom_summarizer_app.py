@@ -99,22 +99,13 @@ with tab1:
                 st.warning("אנא בחר או העלה קובץ וידאו או אודיו תחילה.")
             else:
                 try:
-                    # הגדרת המפתח כמשתנה סביבה כדי שה-SDK יאמת אותה ללא שגיאות 401
-                    os.environ["GEMINI_API_KEY"] = api_key_input
-                    client = genai.Client()
-
-                    file_extension = uploaded_file.name.split(".")[-1]
-                    with tempfile.NamedTemporaryFile(
-                        delete=False, suffix=f".{file_extension}"
-                    ) as tmp_file:
-                        tmp_file.write(uploaded_file.getvalue())
-                        temp_path = tmp_file.name
-
-                    st.info("📤 מעלה את הקובץ לשרתי Google Gemini...")
-                    gemini_file = client.files.upload(file=temp_path)
-                    st.success("הקובץ הועלה בהצלחה!")
-
-                    st.info("🧠 מנתח את ההקלטה...")
+                    client = genai.Client(api_key=api_key_input)
+                    
+                    st.info("🔄 מעבד וקורא את הקובץ ישירות לזיכרון...")
+                    
+                    # קריאת הקובץ כביטים ושליחה ישירה למודל ללא שימוש בשירות ה-Files
+                    file_bytes = uploaded_file.getvalue()
+                    mime_type = uploaded_file.type
 
                     prompt = f"""
                     אתה עוזר אקדמי מקצועי. ניתנת לך הקלטת שיעור / פגישה.
@@ -126,6 +117,8 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
+                    st.info("🧠 שולח לניתוח ב-Gemini...")
+
                     max_retries = 3
                     retry_delay = 3
                     success = False
@@ -135,7 +128,15 @@ with tab1:
                         try:
                             response = client.models.generate_content(
                                 model="gemini-3.6-flash",
-                                contents=[gemini_file, prompt],
+                                contents=[
+                                    {
+                                        "inline_data": {
+                                            "data": file_bytes,
+                                            "mime_type": mime_type
+                                        }
+                                    },
+                                    prompt
+                                ],
                             )
                             success = True
                             break
@@ -163,9 +164,6 @@ with tab1:
                             mime="text/plain",
                         )
 
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-
                 except Exception as e:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
 
@@ -187,18 +185,8 @@ with tab2:
                 st.error("אנא הכנס מפתח API תקין בסיידבר הימני.")
             else:
                 try:
-                    os.environ["GEMINI_API_KEY"] = api_key_input
-                    client = genai.Client()
-
-                    with tempfile.NamedTemporaryFile(
-                        delete=False, suffix=".wav"
-                    ) as tmp_file:
-                        tmp_file.write(audio_value.getvalue())
-                        temp_path = tmp_file.name
-
-                    st.info("📤 מעלה את ההקלטה לשרתי Google Gemini...")
-                    gemini_file = client.files.upload(file=temp_path)
-                    st.success("ההקלטה הועלתה בהצלחה!")
+                    client = genai.Client(api_key=api_key_input)
+                    audio_bytes = audio_value.getvalue()
 
                     st.info("🧠 מנתח את ההקלטה החיה...")
 
@@ -208,7 +196,16 @@ with tab2:
                     """
 
                     response = client.models.generate_content(
-                        model="gemini-3.6-flash", contents=[gemini_file, prompt]
+                        model="gemini-3.6-flash", 
+                        contents=[
+                            {
+                                "inline_data": {
+                                    "data": audio_bytes,
+                                    "mime_type": "audio/wav"
+                                }
+                            },
+                            prompt
+                        ]
                     )
 
                     st.success("הסיכום הושלם בהצלחה!")
@@ -222,9 +219,6 @@ with tab2:
                         file_name="live_recording_summary.txt",
                         mime="text/plain",
                     )
-
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
 
                 except Exception as e:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")

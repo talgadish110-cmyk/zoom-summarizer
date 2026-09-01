@@ -3,10 +3,11 @@ import requests
 import json
 import base64
 import streamlit as st
+from streamlit_mic_recorder import mic_recorder
 
 st.set_page_config(
-    page_title="מערכת סיכום הקלטות זום חכמה",
-    page_icon="🎥",
+    page_title="מערכת סיכום הקלטות זום ומיקרופון",
+    page_icon="🎙️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -40,11 +41,11 @@ st.markdown(
 )
 
 st.markdown(
-    '<div class="main-header">🎥 מערכת חכמה לסיכום הקלטות זום (וידאו ואודיו)</div>',
+    '<div class="main-header">🎙️ מערכת חכמה לסיכום פגישות והקלטות</div>',
     unsafe_allow_html=True,
 )
 st.markdown(
-    '<div class="sub-header">העלה קובץ אודיו, ותן לבינה המלאכותית לסכם עבורך את הכל!</div>',
+    '<div class="sub-header">העלה קובץ זום או דבר ישירות למיקרופון – ותן ל-Gemini לסכם עבורך!</div>',
     unsafe_allow_html=True,
 )
 
@@ -70,7 +71,8 @@ with st.sidebar:
         ],
     )
 
-tab1, tab2 = st.tabs(["📁 העלאת קובץ (MP3/WAV)", "📖 הוראות"])
+# חלוקה לשתי לשוניות: העלאת קובץ או הקלטה חיה
+tab1, tab2, tab3 = st.tabs(["📁 העלאת קובץ (MP3/WAV)", "🎙️ הקלטה ישירה מהמיקרופון", "📖 הוראות"])
 
 with tab1:
     col1, col2 = st.columns([1, 1], gap="large")
@@ -93,13 +95,11 @@ with tab1:
             else:
                 try:
                     st.info("🔄 מעבד את הקובץ ושולח ישירות לשרת...")
-                    
                     file_bytes = uploaded_file.getvalue()
                     mime_type = uploaded_file.type if uploaded_file.type else "audio/mp3"
                     
-                    # המרת הקובץ ל-Base64 לשליחה ישירה ובטוחה
                     base64_audio = base64.b64encode(file_bytes).decode("utf-8")
-
+                    
                     prompt = f"""
                     אתה עוזר אקדמי מקצועי. ניתנת לך הקלטת שיעור / פגישה.
                     אנא צור עבורי סיכום מפורט, מסודר ומעמיק לפי הפורמט הבא: {summary_type}.
@@ -110,9 +110,7 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
-                    # שימוש בכתובת הישירה של ה-API עם המפתח הקיים בפרמטר
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-                    
                     payload = {
                         "contents": [
                             {
@@ -128,16 +126,11 @@ with tab1:
                             }
                         ]
                     }
-
                     headers = {"Content-Type": "application/json"}
-                    
-                    # שליחת הבקשה בשיטת HTTP רגילה שעוקפת כל ספריות אימות חיצוניות
                     response = requests.post(url, headers=headers, data=json.dumps(payload))
 
                     if response.status_code == 200:
-                        res_json = response.json()
-                        summary_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                        
+                        summary_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
                         st.success("הניתוח והסיכום הושלמו בהצלחה!")
                         st.markdown("---")
                         st.markdown("### 📝 תוצאות הסיכום")
@@ -156,6 +149,74 @@ with tab1:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
 
 with tab2:
+    st.markdown("### 🎙️ הקלטה קולית חיה")
+    st.markdown("לחץ על כפתור ההקלטה למטה, דבר אל המיקרופון, ולחץ עצירה בסיום:")
+
+    # רכיב ההקלטה החיה
+    audio_recorded = mic_recorder(
+        start_prompt="🔴 התחל הקלטה",
+        stop_prompt="⏹️ עצור הקלטה",
+        just_once=False,
+        key="mic_recorder"
+    )
+
+    if audio_recorded:
+        st.audio(audio_recorded['bytes'], format='audio/wav')
+        
+        if st.button("נתח וסכם את ההקלטה הקולית", type="primary", key="btn_mic"):
+            if not api_key:
+                st.error("אנא הגדר מפתח ב-Secrets.")
+            else:
+                try:
+                    st.info("🔄 מעבד את ההקלטה שלך ושולח ל-Gemini...")
+                    mic_bytes = audio_recorded['bytes']
+                    base64_mic = base64.b64encode(mic_bytes).decode("utf-8")
+
+                    prompt = f"""
+                    אתה עוזר אקדמי מקצועי. ניתנה לך הקלטה קולית קצרה.
+                    אנא צור עבורי סיכום מסודר וממוקד לפי הפורמט הבא: {summary_type}.
+                    """
+
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    payload = {
+                        "contents": [
+                            {
+                                "parts": [
+                                    {"text": prompt},
+                                    {
+                                        "inline_data": {
+                                            "mime_type": "audio/wav",
+                                            "data": base64_mic
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                    headers = {"Content-Type": "application/json"}
+                    response = requests.post(url, headers=headers, data=json.dumps(payload))
+
+                    if response.status_code == 200:
+                        summary_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+                        st.success("ההקלטה סוכמה בהצלחה!")
+                        st.markdown("---")
+                        st.markdown("### 📝 תוצאות הסיכום מהמיקרופון")
+                        st.markdown(summary_text)
+
+                        st.download_button(
+                            label="📥 הורד סיכום כקובץ טקסט",
+                            data=summary_text,
+                            file_name="mic_summary.txt",
+                            mime="text/plain",
+                            key="download_mic"
+                        )
+                    else:
+                        st.error(f"שגיאת שרת ({response.status_code}): {response.text}")
+
+                except Exception as e:
+                    st.error(f"אירעה שגיאה בניתוח ההקלטה: {e}")
+
+with tab3:
     st.markdown("### 📖 מדריך הרצה מהיר")
     st.markdown("1. המפתח שלך מוגדר ב-Secrets.")
-    st.markdown("2. העלה קובץ אודיו ולץ על כפתור הניתוח.")
+    st.markdown("2. תוכל לבחור בין העלאת קובץ אודיו מוכן לבין הקלטה חיה דרך הלשונית השנייה.")

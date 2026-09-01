@@ -1,8 +1,6 @@
-import os
 import time
 import tempfile
-from google import genai
-from google.genai import errors
+import google.generativeai as genai
 import streamlit as st
 
 # הגדרת עמוד
@@ -47,18 +45,19 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown(
-    '<div class="sub-header">העלה הקלטה (MP4, MP3 ועוד) או הקלט בשידור חי מהמיקרופון, ותן לבינה המלאכותית לסכם עבורך את הכל!</div>',
+    '<div class="sub-header">העלה הקלטה או אודיו, ותן לבינה המלאכותית לסכם עבורך את הכל!</div>',
     unsafe_allow_html=True,
 )
 
-# תפריט צד (Sidebar) להגדרות
+# תפריט צד (Sidebar) להגדרות - מפתח קבוע מראש לנוחותך
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
     
     api_key_input = st.text_input(
         "הכנס מפתח Google Gemini API Key",
+        value="AQ.Ab8RN6JOCknVIFli07JNT-uy1KU5enVYMoEVDdCPBQAURvn_Pw",
         type="password",
-        help="הכנס כאן את המפתח התקין מ-Google AI Studio"
+        help="המפתח שלך מוגדר כאן."
     )
 
     st.markdown("---")
@@ -74,9 +73,8 @@ with st.sidebar:
         ],
     )
 
-# טאבים ראשיים: העלאת קובץ מול הקלטה חיה
 tab1, tab2, tab3 = st.tabs(
-    ["📁 העלאת קובץ (MP4/MP3)", "🎤 הקלטה חיה מהמיקרופון", "📖 הסבר והוראות הרצה"]
+    ["📁 העלאת קובץ (MP3/WAV)", "🎤 הקלטה חיה מהמיקרופון", "📖 הסבר והוראות"]
 )
 
 with tab1:
@@ -85,8 +83,8 @@ with tab1:
     with col1:
         st.markdown("### 📥 העלאת קובץ מהמחשב")
         uploaded_file = st.file_uploader(
-            "בחר קובץ וידאו או אודיו",
-            type=["mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "m4a"],
+            "בחר קובץ אודיו (מומלץ MP3)",
+            type=["mp3", "wav", "m4a"],
         )
 
     with col2:
@@ -94,18 +92,25 @@ with tab1:
 
         if st.button("התחל ניתוח וסיכום פגישה", type="primary", key="btn_file"):
             if not api_key_input:
-                st.error("אנא הכנס מפתח API תקין בסיידבר הימני.")
+                st.error("אנא הכנס מפתח API תקין.")
             elif uploaded_file is None:
-                st.warning("אנא בחר או העלה קובץ וידאו או אודיו תחילה.")
+                st.warning("אנא בחר או העלה קובץ אודיו תחילה.")
             else:
                 try:
-                    client = genai.Client(api_key=api_key_input)
+                    # הגדרת המפתח בספרייה הקלאסית והיציבה
+                    genai.configure(api_key=api_key_input)
                     
-                    st.info("🔄 מעבד וקורא את הקובץ ישירות לזיכרון...")
+                    st.info("📤 מעלה את הקובץ לגוגל...")
                     
-                    # קריאת הקובץ כביטים ושליחה ישירה למודל ללא שימוש בשירות ה-Files
-                    file_bytes = uploaded_file.getvalue()
-                    mime_type = uploaded_file.type
+                    # העלאת קובץ דרך Files API של הספרייה הקלאסית (תומך במפתח רגיל לחלוטין)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        temp_path = tmp_file.name
+
+                    audio_file = genai.upload_file(temp_path)
+                    st.success("הקובץ הועלה בהצלחה!")
+
+                    st.info("🧠 שולח לניתוח ב-Gemini...")
 
                     prompt = f"""
                     אתה עוזר אקדמי מקצועי. ניתנת לך הקלטת שיעור / פגישה.
@@ -117,98 +122,11 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
-                    st.info("🧠 שולח לניתוח ב-Gemini...")
+                    # שימוש במודל היציב והמהיר
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                    response = model.generate_content([audio_file, prompt])
 
-                    max_retries = 3
-                    retry_delay = 3
-                    success = False
-                    response = None
-
-                    for attempt in range(max_retries):
-                        try:
-                            response = client.models.generate_content(
-                                model="gemini-3.6-flash",
-                                contents=[
-                                    {
-                                        "inline_data": {
-                                            "data": file_bytes,
-                                            "mime_type": mime_type
-                                        }
-                                    },
-                                    prompt
-                                ],
-                            )
-                            success = True
-                            break
-                        except errors.APIError as api_err:
-                            if (
-                                "503" in str(api_err)
-                                or "UNAVAILABLE" in str(api_err)
-                            ):
-                                if attempt < max_retries - 1:
-                                    time.sleep(retry_delay)
-                                    retry_delay *= 2
-                                    continue
-                            raise api_err
-
-                    if success and response:
-                        st.success("הניתוח והסיכום הושלמו בהצלחה!")
-                        st.markdown("---")
-                        st.markdown("### 📝 תוצאות הסיכום")
-                        st.markdown(response.text)
-
-                        st.download_button(
-                            label="📥 הורד סיכום כקובץ טקסט",
-                            data=response.text,
-                            file_name="meeting_summary.txt",
-                            mime="text/plain",
-                        )
-
-                except Exception as e:
-                    st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
-
-with tab2:
-    st.markdown("### 🎙️ הקלטה חיה מהמיקרופון")
-    st.info(
-        "לחץ על כפתור ההקלטה בדפדפן כדי להקליט שיחה או פגישה בזמן אמת."
-    )
-
-    audio_value = st.audio_input("הקלט קול מהמיקרופון")
-
-    if audio_value is not None:
-        st.audio(audio_value)
-
-        if st.button(
-            "נתח והפק סיכום להקלטה החיה", type="primary", key="btn_mic"
-        ):
-            if not api_key_input:
-                st.error("אנא הכנס מפתח API תקין בסיידבר הימני.")
-            else:
-                try:
-                    client = genai.Client(api_key=api_key_input)
-                    audio_bytes = audio_value.getvalue()
-
-                    st.info("🧠 מנתח את ההקלטה החיה...")
-
-                    prompt = f"""
-                    הקלטה זו בוצעה בשידור חי דרך מיקרופון. אנא צור עבורה סיכום מפורט ומקצועי בעברית בהתאם לבחירה: {summary_type}.
-                    כלול את ההסברים והנושאים המרכזיים בצורה מסודרת.
-                    """
-
-                    response = client.models.generate_content(
-                        model="gemini-3.6-flash", 
-                        contents=[
-                            {
-                                "inline_data": {
-                                    "data": audio_bytes,
-                                    "mime_type": "audio/wav"
-                                }
-                            },
-                            prompt
-                        ]
-                    )
-
-                    st.success("הסיכום הושלם בהצלחה!")
+                    st.success("הניתוח והסיכום הושלמו בהצלחה!")
                     st.markdown("---")
                     st.markdown("### 📝 תוצאות הסיכום")
                     st.markdown(response.text)
@@ -216,15 +134,50 @@ with tab2:
                     st.download_button(
                         label="📥 הורד סיכום כקובץ טקסט",
                         data=response.text,
-                        file_name="live_recording_summary.txt",
+                        file_name="meeting_summary.txt",
                         mime="text/plain",
                     )
+
+                    # ניקוי קובץ זמני
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
 
                 except Exception as e:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
 
+with tab2:
+    st.markdown("### 🎙️ הקלטה חיה מהמיקרופון")
+    audio_value = st.audio_input("הקלט קול מהמיקרופון")
+
+    if audio_value is not None:
+        st.audio(audio_value)
+        if st.button("נתח והפק סיכום להקלטה החיה", type="primary", key="btn_mic"):
+            if not api_key_input:
+                st.error("אנא הכנס מפתח API.")
+            else:
+                try:
+                    genai.configure(api_key=api_key_input)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+                        tmp_file.write(audio_value.getvalue())
+                        temp_path = tmp_file.name
+
+                    audio_file = genai.upload_file(temp_path)
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                    
+                    prompt = f"צור סיכום מפורט ומקצועי בעברית להקלטה זו לפי: {summary_type}"
+                    response = model.generate_content([audio_file, prompt])
+
+                    st.success("הסיכום הושלם בהצלחה!")
+                    st.markdown("### 📝 תוצאות הסיכום")
+                    st.markdown(response.text)
+
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                except Exception as e:
+                    st.error(f"אירעה שגיאה: {e}")
+
 with tab3:
     st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. הכנס את מפתח ה-API שלך בסיידבר הימני.")
-    st.markdown("2. בחר קובץ שמע (MP3) או עבור לטאב ההקלטה החיה.")
-    st.markdown("3. בחר את פורמט הסיכום הרצוי ולץ על כפתור הניתוח.")
+    st.markdown("1. המפתח שלך כבר מוזן אוטומטית.")
+    st.markdown("2. העלה קובץ MP3 שהמרת.")
+    st.markdown("3. לחץ על כפתור הניתוח.")

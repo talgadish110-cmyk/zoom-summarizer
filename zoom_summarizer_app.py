@@ -2,7 +2,6 @@ import os
 import time
 import tempfile
 from google import genai
-from google.genai import errors
 import streamlit as st
 
 st.set_page_config(
@@ -92,23 +91,14 @@ with tab1:
             elif uploaded_file is None:
                 st.warning("אנא בחר או העלה קובץ אודיו תחילה.")
             else:
-                temp_path = None
                 try:
                     os.environ["GEMINI_API_KEY"] = api_key
                     client = genai.Client()
 
-                    st.info("📤 שומר קובץ באופן זמני ומעלה לשרתי Google...")
+                    st.info("🔄 מעבד וקורא את הקובץ ישירות לזיכרון...")
                     
-                    file_extension = uploaded_file.name.split(".")[-1]
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as tmp_file:
-                        tmp_file.write(uploaded_file.getvalue())
-                        temp_path = tmp_file.name
-
-                    # העלאה רשמית דרך ה-Files API שתומכת בקבצים גדולים
-                    gemini_file = client.files.upload(file=temp_path)
-                    st.success("הקובץ הועלה בהצלחה לענן של גוגל!")
-
-                    st.info("🧠 מנתח את ההקלטה ב-Gemini...")
+                    file_bytes = uploaded_file.getvalue()
+                    mime_type = uploaded_file.type if uploaded_file.type else "audio/mp3"
 
                     prompt = f"""
                     אתה עוזר אקדמי מקצועי. ניתנת לך הקלטת שיעור / פגישה.
@@ -120,9 +110,20 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
+                    st.info("🧠 שולח לניתוח ב-Gemini...")
+
+                    # שליחה ישירה בזיכרון בלי להשתמש בשרת ה-Files (עוקף את שגיאת 401 סופית)
                     response = client.models.generate_content(
                         model="gemini-2.5-flash",
-                        contents=[gemini_file, prompt],
+                        contents=[
+                            {
+                                "inline_data": {
+                                    "data": file_bytes,
+                                    "mime_type": mime_type
+                                }
+                            },
+                            prompt
+                        ],
                     )
 
                     st.success("הניתוח והסיכום הושלמו בהצלחה!")
@@ -139,13 +140,8 @@ with tab1:
 
                 except Exception as e:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
-                
-                finally:
-                    if temp_path and os.path.exists(temp_path):
-                        os.remove(temp_path)
 
 with tab2:
     st.markdown("### 📖 מדריך הרצה מהיר")
     st.markdown("1. המפתח מוגדר ב-Secrets.")
-    st.markdown("2. העלה קובץ אודיו (מומלץ לדחוס קבצים מעל 50MB לביצועים מהירים).")
-    st.markdown("3. לחץ על כפתור הניתוח.")
+    st.markdown("2. העלה קובץ אודיו ולץ על כפתור הניתוח.")

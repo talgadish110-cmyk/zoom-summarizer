@@ -49,12 +49,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# אפשרות להזין מפתח ישירות מהצד או לקחת מה-Secrets
+# שליפה מלאה ותקינה של המפתח מתוך ה-Secrets
 secret_api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
-    api_key = st.text_input("הכנס מפתח API של Gemini", value=secret_api_key, type="password")
+    api_key = st.text_input(
+        "הכנס מפתח API של Gemini", value=secret_api_key, type="password"
+    )
     
     if api_key:
         st.success("מפתח ה-API מוגדר.")
@@ -112,7 +114,6 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
-                    # שימוש במודל gemini-1.5-flash שהוא היציב ביותר לכל סוגי המפתחות
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
                     payload = {
                         "contents": [

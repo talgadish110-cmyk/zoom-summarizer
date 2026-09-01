@@ -1,7 +1,11 @@
+import io
+import re
 import time
-import json
 import requests
 import streamlit as st
+
+from google import genai
+from google.genai import types
 
 st.set_page_config(
     page_title="מערכת סיכום הקלטות זום חכמה",
@@ -50,15 +54,15 @@ st.markdown(
 # שליפת המפתח מתוך ה-Secrets שלך
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-BASE_URL = "https://generativelanguage.googleapis.com"
 MODEL = "gemini-2.5-flash"
-# מעל הגודל הזה (בבתים) נעדיף להעלות דרך Files API במקום inline base64
+# מעל הגודל הזה נעדיף להעלות דרך Files API (client.files.upload) במקום inline bytes
 INLINE_SIZE_LIMIT = 15 * 1024 * 1024  # 15MB ליתר ביטחון
 
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
     if api_key:
-        st.success("מפתח ה-API מוגדר במערכת.")
+        masked = api_key[:6] + "····" if len(api_key) > 6 else "····"
+        st.success(f"מפתח ה-API מוגדר במערכת ({masked}).")
     else:
         st.error("חסר מפתח ב-Secrets.")
 
@@ -78,7 +82,10 @@ with st.sidebar:
 tab1, tab2 = st.tabs(["📁 העלאת קובץ / דרייב", "📖 הוראות"])
 
 
-import re
+@st.cache_resource(show_spinner=False)
+def get_client(key: str):
+    """יוצר Client יחיד של ה-SDK הרשמי, לפי מפתח ה-API. ה-SDK מטפל באימות בעצמו."""
+    return genai.Client(api_key=key)
 
 
 def extract_drive_file_id(url: str) -> str:
@@ -112,7 +119,6 @@ def download_from_google_drive(url: str):
 
     response = session.get(base, params={"id": file_id, "export": "download"}, stream=True)
 
-    # אם גוגל מחזירה עמוד אזהרה (HTML) במקום הקובץ - צריך לאשר עם טוקן
     token = None
     for key, value in response.cookies.items():
         if key.startswith("download_warning"):
@@ -120,7 +126,6 @@ def download_from_google_drive(url: str):
             break
 
     if token is None and "text/html" in response.headers.get("Content-Type", ""):
-        # ניסיון חלופי: לחלץ את הטוקן מתוך גוף התגובה (Google משנה את זה מדי פעם)
         match = re.search(r'confirm=([0-9A-Za-z_-]+)&', response.text)
         if match:
             token = match.group(1)
@@ -141,136 +146,54 @@ def download_from_google_drive(url: str):
         )
 
     file_bytes = response.content
-
-    # ניחוש mime type/שם קובץ מתוך הקישור המקורי, בהיעדר מידע טוב יותר מהתגובה
     guessed_mime = content_type if content_type and "octet-stream" not in content_type else "audio/mp3"
     display_name = f"drive_file_{file_id}"
 
     return file_bytes, guessed_mime, display_name
 
 
-def gemini_headers():
-    """
-    כותרות אימות תקניות ל-Gemini API.
-    חשוב: זה NOT Bearer token! מפתח Gemini נשלח דרך x-goog-api-key.
-    """
-    return {"x-goog-api-key": api_key}
-
-
-def upload_file_to_gemini(file_bytes: bytes, mime_type: str, display_name: str) -> str:
-    """
-    מעלה קובץ גדול ל-Gemini Files API בפרוטוקול resumable upload,
-    ומחזיר את ה-file_uri לשימוש בבקשת generateContent.
-
-    הערה: לנקודת הקצה של ה-Files API (upload/v1beta/files) גוגל דורשת
-    את המפתח כפרמטר ?key= בכתובת ה-URL, לא רק כ-header - לכן הוא נשלח בשתי הצורות.
-    """
-    num_bytes = len(file_bytes)
-
-    # שלב 1: פתיחת סשן העלאה (start)
-    start_headers = {
-        **gemini_headers(),
-        "X-Goog-Upload-Protocol": "resumable",
-        "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": str(num_bytes),
-        "X-Goog-Upload-Header-Content-Type": mime_type,
-        "Content-Type": "application/json",
-    }
-    start_body = {"file": {"display_name": display_name}}
-
-    start_resp = requests.post(
-        f"{BASE_URL}/upload/v1beta/files",
-        params={"key": api_key},
-        headers=start_headers,
-        data=json.dumps(start_body),
-    )
-    if start_resp.status_code != 200:
-        raise RuntimeError(
-            f"פתיחת ההעלאה ל-Files API נכשלה (קוד {start_resp.status_code}): {start_resp.text}"
-        )
-
-    upload_url = start_resp.headers.get("X-Goog-Upload-URL")
-    if not upload_url:
-        raise RuntimeError("לא התקבלה כתובת העלאה (X-Goog-Upload-URL) מ-Gemini.")
-
-    # שלב 2: העלאת התוכן בפועל (upload + finalize)
-    upload_headers = {
-        "Content-Length": str(num_bytes),
-        "X-Goog-Upload-Offset": "0",
-        "X-Goog-Upload-Command": "upload, finalize",
-    }
-    upload_resp = requests.post(upload_url, headers=upload_headers, data=file_bytes)
-    if upload_resp.status_code != 200:
-        raise RuntimeError(
-            f"העלאת תוכן הקובץ נכשלה (קוד {upload_resp.status_code}): {upload_resp.text}"
-        )
-
-    file_info = upload_resp.json()["file"]
-    file_uri = file_info["uri"]
-    file_name = file_info["name"]  # לדוגמה: "files/abc123"
-
-    # שלב 3: המתנה שהקובץ יעבור מעיבוד (PROCESSING) למצב פעיל (ACTIVE)
-    state = file_info.get("state", "PROCESSING")
-    while state == "PROCESSING":
-        time.sleep(2)
-        status_resp = requests.get(
-            f"{BASE_URL}/v1beta/{file_name}", params={"key": api_key}, headers=gemini_headers()
-        )
-        status_resp.raise_for_status()
-        file_info = status_resp.json()
-        state = file_info.get("state", "PROCESSING")
-
-    if state != "ACTIVE":
-        raise RuntimeError(f"עיבוד הקובץ נכשל בצד גוגל (סטטוס: {state}).")
-
-    return file_uri, file_name
-
-
-def delete_gemini_file(file_name: str):
-    """מוחק את הקובץ שהועלה מהשרתים של גוגל אחרי שסיימנו איתו."""
-    try:
-        requests.delete(f"{BASE_URL}/v1beta/{file_name}", params={"key": api_key}, headers=gemini_headers())
-    except Exception:
-        pass  # ניקוי best-effort - אין צורך לעצור את המשתמש בגלל זה
-
-
 def summarize_with_gemini(prompt: str, mime_type: str, file_bytes: bytes, display_name: str) -> str:
     """
-    שולח את הבקשה ל-Gemini. אם הקובץ קטן - שולח inline (base64) בתוך הבקשה.
-    אם הקובץ גדול - מעלה אותו קודם דרך Files API ושולח רק הפניה (file_uri).
+    שולח את הבקשה ל-Gemini דרך ה-SDK הרשמי (google-genai).
+    קובץ קטן -> נשלח כ-bytes inline. קובץ גדול -> מועלה קודם דרך client.files.upload
+    ואז מוחק אותו מהענן של גוגל בסיום, בין אם הצליח ובין אם לא.
     """
-    file_name_to_cleanup = None
+    client = get_client(api_key)
+    uploaded_file_name = None
 
-    if len(file_bytes) <= INLINE_SIZE_LIMIT:
-        import base64
-        base64_audio = base64.b64encode(file_bytes).decode("utf-8")
-        parts = [
-            {"text": prompt},
-            {"inline_data": {"mime_type": mime_type, "data": base64_audio}},
-        ]
-    else:
-        st.info("📤 הקובץ גדול - מעלה אותו דרך Files API (זה עשוי לקחת רגע)...")
-        file_uri, file_name_to_cleanup = upload_file_to_gemini(file_bytes, mime_type, display_name)
-        parts = [
-            {"text": prompt},
-            {"file_data": {"mime_type": mime_type, "file_uri": file_uri}},
-        ]
+    try:
+        if len(file_bytes) <= INLINE_SIZE_LIMIT:
+            content_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
+        else:
+            st.info("📤 הקובץ גדול - מעלה אותו דרך Files API (זה עשוי לקחת רגע)...")
+            uploaded = client.files.upload(
+                file=io.BytesIO(file_bytes),
+                config=types.UploadFileConfig(display_name=display_name, mime_type=mime_type),
+            )
+            uploaded_file_name = uploaded.name
 
-    url = f"{BASE_URL}/v1beta/models/{MODEL}:generateContent"
-    headers = {**gemini_headers(), "Content-Type": "application/json"}
-    payload = {"contents": [{"parts": parts}]}
+            # המתנה שהקובץ יעבור ממצב עיבוד (PROCESSING) למצב פעיל (ACTIVE)
+            while uploaded.state == types.FileState.PROCESSING:
+                time.sleep(2)
+                uploaded = client.files.get(name=uploaded_file_name)
 
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+            if uploaded.state != types.FileState.ACTIVE:
+                raise RuntimeError(f"עיבוד הקובץ נכשל בצד גוגל (סטטוס: {uploaded.state}).")
 
-    # ניקוי הקובץ מהענן של גוגל, בין אם הצלחנו ובין אם לא
-    if file_name_to_cleanup:
-        delete_gemini_file(file_name_to_cleanup)
+            content_part = types.Part.from_uri(file_uri=uploaded.uri, mime_type=mime_type)
 
-    if response.status_code != 200:
-        raise RuntimeError(f"שגיאה מ-Gemini generateContent (קוד {response.status_code}): {response.text}")
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=[prompt, content_part],
+        )
+        return response.text
 
-    res_json = response.json()
-    return res_json["candidates"][0]["content"]["parts"][0]["text"]
+    finally:
+        if uploaded_file_name:
+            try:
+                client.files.delete(name=uploaded_file_name)
+            except Exception:
+                pass  # ניקוי best-effort - לא צריך לעצור את המשתמש בגלל זה
 
 
 with tab1:
@@ -358,15 +281,12 @@ with tab1:
                         mime="text/plain",
                     )
 
-                except requests.HTTPError as e:
-                    st.error(f"שגיאת HTTP מול Google API: {e}")
                 except Exception as e:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
-                    if "401" in str(e) or "403" in str(e) or "UNAUTHENTICATED" in str(e):
+                    if "401" in str(e) or "403" in str(e) or "UNAUTHENTICATED" in str(e) or "PERMISSION" in str(e):
                         st.warning(
-                            "בדוק שמפתח ה-API שהגדרת ב-Secrets הוא אכן מפתח Gemini "
-                            "תקני שהופק דרך Google AI Studio (https://aistudio.google.com/apikey), "
-                            "ולא סוד/מפתח OAuth של שירות אחר."
+                            "בדוק שמפתח ה-API שהגדרת ב-Secrets תקין ופעיל, ושה-Generative Language API "
+                            "מופעל בפרויקט שאליו הוא משויך ב-Google Cloud Console."
                         )
 
 with tab2:
@@ -381,7 +301,12 @@ with tab2:
     )
     st.markdown(
         "4. קבצים קטנים (עד כ-15MB) נשלחים ישירות בתוך הבקשה. "
-        "קבצים גדולים יותר (עד 2GB) מועלים אוטומטית דרך Files API של גוגל, "
+        "קבצים גדולים יותר (עד 2GB) מועלים אוטומטית דרך ה-SDK הרשמי של גוגל, "
         "וזה עשוי לקחת מספר שניות עד דקות בהתאם לגודל הקובץ."
     )
-    st.markdown("5. הקובץ נמחק אוטומטית מהשרתים של גוגל (מה-Files API) בסיום העיבוד.")
+    st.markdown("5. הקובץ נמחק אוטומטית מהשרתים של גוגל בסיום העיבוד.")
+    st.markdown("---")
+    st.markdown(
+        "**דרישת התקנה:** ודא שהחבילה `google-genai` מותקנת (ולא רק `requests`). "
+        "הוסף שורה `google-genai` לקובץ `requirements.txt` שלך."
+    )

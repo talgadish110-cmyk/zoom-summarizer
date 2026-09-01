@@ -105,9 +105,7 @@ with tab1:
                         temp_path = tmp_file.name
 
                     st.info("📤 מעלה את הקובץ לשרתי Google Gemini...")
-                    gemini_file = client.files.upload(
-                        file=temp_path, mime_type=uploaded_file.type
-                    )
+                    gemini_file = client.files.upload(file=temp_path)
                     st.success("הקובץ הועלה בהצלחה!")
 
                     st.info("🧠 מנתח את ההקלטה...")
@@ -147,7 +145,6 @@ with tab2:
         "לחץ על כפתור ההקלטה בדפדפן כדי להקליט שיחה או פגישה בזמן אמת."
     )
 
-    # רכיב ההקלטה המובנה ב-Streamlit
     audio_value = st.audio_input("הקלט קול מהמיקרופון")
 
     if audio_value is not None:
@@ -169,9 +166,7 @@ with tab2:
                         temp_path = tmp_file.name
 
                     st.info("📤 מעלה את ההקלטה לשרתי Google Gemini...")
-                    gemini_file = client.files.upload(
-                        file=temp_path, mime_type="audio/wav"
-                    )
+                    gemini_file = client.files.upload(file=temp_path)
                     st.success("ההקלטה הועלתה בהצלחה!")
 
                     st.info("🧠 מנתח את ההקלטה החיה...")

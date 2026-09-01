@@ -1,6 +1,8 @@
 import os
+import time
 import tempfile
 from google import genai
+from google.genai import errors
 import streamlit as st
 
 # הגדרת עמוד
@@ -49,7 +51,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# תפריט צד (Sidebar) להגדרות
+# תפריט צד (Sidebar) להגדרות (כולל שמירה קבועה אם תרצה)
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
     api_key_input = st.text_input(
@@ -108,7 +110,9 @@ with tab1:
                     gemini_file = client.files.upload(file=temp_path)
                     st.success("הקובץ הועלה בהצלחה!")
 
-                    st.info("🧠 מנתח את ההקלטה...")
+                    st.info(
+                        "🧠 מנתח את ההקלטה (במידת העומס ייתכן ניסיון נוסף אוטומטי)..."
+                    )
 
                     prompt = f"""
                     אתה עוזר אישי מקצועי וחכם. ניתנת לך הקלטת פגישה (וידאו או אודיו).
@@ -117,22 +121,43 @@ with tab1:
                     כתוב בצורה נקייה, מסודרת ומקצועית בעברית.
                     """
 
-                    # שימוש במודל העדכני gemini-3.6-flash שגוגל דורשת
-                    response = client.models.generate_content(
-                        model="gemini-3.6-flash", contents=[gemini_file, prompt]
-                    )
+                    # מנגנון ניסיון חוזר (Retry) אוטומטי לשגיאות עומס (503)
+                    max_retries = 3
+                    retry_delay = 3
+                    success = False
+                    response = None
 
-                    st.success("הניתוח והסיכום הושלמו בהצלחה!")
-                    st.markdown("---")
-                    st.markdown("### 📝 תוצאות הסיכום")
-                    st.markdown(response.text)
+                    for attempt in range(max_retries):
+                        try:
+                            response = client.models.generate_content(
+                                model="gemini-3.6-flash",
+                                contents=[gemini_file, prompt],
+                            )
+                            success = True
+                            break
+                        except errors.APIError as api_err:
+                            if (
+                                "503" in str(api_err)
+                                or "UNAVAILABLE" in str(api_err)
+                            ):
+                                if attempt < max_retries - 1:
+                                    time.sleep(retry_delay)
+                                    retry_delay *= 2
+                                    continue
+                            raise api_err
 
-                    st.download_button(
-                        label="📥 הורד סיכום כקובץ טקסט",
-                        data=response.text,
-                        file_name="meeting_summary.txt",
-                        mime="text/plain",
-                    )
+                    if success and response:
+                        st.success("הניתוח והסיכום הושלמו בהצלחה!")
+                        st.markdown("---")
+                        st.markdown("### 📝 תוצאות הסיכום")
+                        st.markdown(response.text)
+
+                        st.download_button(
+                            label="📥 הורד סיכום כקובץ טקסט",
+                            data=response.text,
+                            file_name="meeting_summary.txt",
+                            mime="text/plain",
+                        )
 
                     if os.path.exists(temp_path):
                         os.remove(temp_path)

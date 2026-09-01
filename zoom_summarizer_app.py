@@ -161,6 +161,9 @@ def upload_file_to_gemini(file_bytes: bytes, mime_type: str, display_name: str) 
     """
     מעלה קובץ גדול ל-Gemini Files API בפרוטוקול resumable upload,
     ומחזיר את ה-file_uri לשימוש בבקשת generateContent.
+
+    הערה: לנקודת הקצה של ה-Files API (upload/v1beta/files) גוגל דורשת
+    את המפתח כפרמטר ?key= בכתובת ה-URL, לא רק כ-header - לכן הוא נשלח בשתי הצורות.
     """
     num_bytes = len(file_bytes)
 
@@ -177,10 +180,14 @@ def upload_file_to_gemini(file_bytes: bytes, mime_type: str, display_name: str) 
 
     start_resp = requests.post(
         f"{BASE_URL}/upload/v1beta/files",
+        params={"key": api_key},
         headers=start_headers,
         data=json.dumps(start_body),
     )
-    start_resp.raise_for_status()
+    if start_resp.status_code != 200:
+        raise RuntimeError(
+            f"פתיחת ההעלאה ל-Files API נכשלה (קוד {start_resp.status_code}): {start_resp.text}"
+        )
 
     upload_url = start_resp.headers.get("X-Goog-Upload-URL")
     if not upload_url:
@@ -193,7 +200,10 @@ def upload_file_to_gemini(file_bytes: bytes, mime_type: str, display_name: str) 
         "X-Goog-Upload-Command": "upload, finalize",
     }
     upload_resp = requests.post(upload_url, headers=upload_headers, data=file_bytes)
-    upload_resp.raise_for_status()
+    if upload_resp.status_code != 200:
+        raise RuntimeError(
+            f"העלאת תוכן הקובץ נכשלה (קוד {upload_resp.status_code}): {upload_resp.text}"
+        )
 
     file_info = upload_resp.json()["file"]
     file_uri = file_info["uri"]
@@ -203,7 +213,9 @@ def upload_file_to_gemini(file_bytes: bytes, mime_type: str, display_name: str) 
     state = file_info.get("state", "PROCESSING")
     while state == "PROCESSING":
         time.sleep(2)
-        status_resp = requests.get(f"{BASE_URL}/v1beta/{file_name}", headers=gemini_headers())
+        status_resp = requests.get(
+            f"{BASE_URL}/v1beta/{file_name}", params={"key": api_key}, headers=gemini_headers()
+        )
         status_resp.raise_for_status()
         file_info = status_resp.json()
         state = file_info.get("state", "PROCESSING")
@@ -217,7 +229,7 @@ def upload_file_to_gemini(file_bytes: bytes, mime_type: str, display_name: str) 
 def delete_gemini_file(file_name: str):
     """מוחק את הקובץ שהועלה מהשרתים של גוגל אחרי שסיימנו איתו."""
     try:
-        requests.delete(f"{BASE_URL}/v1beta/{file_name}", headers=gemini_headers())
+        requests.delete(f"{BASE_URL}/v1beta/{file_name}", params={"key": api_key}, headers=gemini_headers())
     except Exception:
         pass  # ניקוי best-effort - אין צורך לעצור את המשתמש בגלל זה
 
@@ -255,7 +267,7 @@ def summarize_with_gemini(prompt: str, mime_type: str, file_bytes: bytes, displa
         delete_gemini_file(file_name_to_cleanup)
 
     if response.status_code != 200:
-        raise RuntimeError(f"שגיאת שרת מ-Google API ({response.status_code}): {response.text}")
+        raise RuntimeError(f"שגיאה מ-Gemini generateContent (קוד {response.status_code}): {response.text}")
 
     res_json = response.json()
     return res_json["candidates"][0]["content"]["parts"][0]["text"]

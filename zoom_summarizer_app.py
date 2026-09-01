@@ -1,69 +1,64 @@
-import time
 from google import genai
-from google.genai import errors
-import pandas as pd
 import streamlit as st
 
-# כותרת האפליקציה
+# הגדרת דף ה-Streamlit
 st.set_page_config(
-    page_title="Control Center & AI Analyzer", page_icon="🛡️", layout="wide"
+    page_title="Zoom Meeting Summarizer", page_icon="🎙️", layout="wide"
 )
 
-st.title("🛡️ מרכז בקרה ואוטומציה - סייבר ופיתוח")
+st.title("🎙️ מערכת מתקדמת לסיכום פגישות זום והקלטות")
 st.write(
-    "ממשק ניהול לניתוח קבצים, הפקת סיכומים והרצת סקריפטים באמצעות Google GenAI."
+    "העלה קובץ שמע של פגישה (MP3 / WAV) וקבל ניתוח מעמיק, סיכום מפורט ותובנות מפתח."
 )
 
-# הגדרת מפתח ה-API מתוך Streamlit Secrets
+# שליפת מפתח ה-API מתוך Streamlit Secrets
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 if not api_key:
     st.warning("נא להגדיר את מפתח ה-API ב-Streamlit Secrets.")
 else:
-    # אתחול הלקוח החדש של Google GenAI
+    # אתחול הלקוח של Google GenAI
     client = genai.Client(api_key=api_key)
 
-    # אזור העלאת קבצים
-    uploaded_file = st.file_uploader(
-        "העלה קובץ לניתוח (למשל טקסט, קוד או נתונים)",
-        type=["txt", "py", "csv", "json", "log"],
+    # העלאת קובץ שמע
+    audio_file = st.file_uploader(
+        "בחר קובץ שמע של הפגישה", type=["mp3", "wav", "m4a", "ogg"]
     )
 
-    if uploaded_file is not None:
-        file_bytes = uploaded_file.read()
-        file_content = file_bytes.decode("utf-8", errors="ignore")
-
+    if audio_file is not None:
+        st.audio(audio_file)
         st.success("הקובץ הועלה בהצלחה!")
 
         if st.button("התחל ניתוח עמוק והפקת סיכום מורחב"):
-            with st.spinner("מנתח את ההקלטה בניתוח מעמיק ומפיק את הסיכום המורחב..."):
-                max_retries = 3
-                retry_delay = 2
-                success = False
-                response = None
+            with st.spinner(
+                "מעלה את הקובץ לשרתי Google Gemini (עבור קובץ גדול זה ייקח מספר רגעים)..."
+            ):
+                try:
+                    # שמירת הקובץ זמנית כדי שנוכל להעלות אותו ל-Files API של גוגל
+                    with open("temp_audio_file", "wb") as f:
+                        f.write(audio_file.getbuffer())
 
-                # מנגנון ניסיון חוזר במקרה של עומס זמני (שגיאות 503)
-                for attempt in range(max_retries):
-                    try:
-                        # שימוש במודל היציב והמהיר gemini-2.0-flash
-                        response = client.models.generate_content(
-                            model="gemini-2.0-flash",
-                            contents=f"אנא נתח את תוכן הקובץ הבא והקפד על מתן סיכום מפורט ומקצועי בעברית:\n\n{file_content}",
-                        )
-                        success = True
-                        break
-                    except errors.APIError as e:
-                        if "503" in str(e) or "UNAVAILABLE" in str(e):
-                            if attempt < max_retries - 1:
-                                time.sleep(retry_delay)
-                                retry_delay *= 2  # המתנה אקספוננציאלית
-                                continue
-                        st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
-                        break
-                    except Exception as e:
-                        st.error(f"שגיאה בלתי צפויה: {e}")
-                        break
+                    # העלאת הקובץ באמצעות ה-Files API הרשמי של google-genai
+                    uploaded_file_ref = client.files.upload(
+                        file="temp_audio_file"
+                    )
 
-                if success and response:
-                    st.markdown("### תוצאות הניתוח:")
-                    st.write(response.text)
+                    st.info(
+                        "הקובץ הועלה לשרת בהצלחה. ממתין לניתוח והפקת הסיכום..."
+                    )
+
+                    # הפעלת מודל gemini-2.0-flash לניתוח קובץ השמע
+                    response = client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=[
+                            uploaded_file_ref,
+                            "אנא האזן לקובץ השמע הזה, נתח אותו בניתוח מעמיק, והפק סיכום מפורט ומקצועי בעברית הכולל את עיקרי הדברים, החלטות שהתקבלו ומשימות להמשך.",
+                        ],
+                    )
+
+                    st.success("הניתוח הסתיים בהצלחה!")
+                    st.markdown("### 📋 סיכום הפגישה:")
+                    st.markdown(response.text)
+
+                except Exception as e:
+                    st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")

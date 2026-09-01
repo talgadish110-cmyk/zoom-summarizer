@@ -117,8 +117,9 @@ with tab1:
                     כתוב בצורה נקייה, מסודרת ומקצועית בעברית.
                     """
 
+                    # שימוש במודל העדכני gemini-2.5-flash
                     response = client.models.generate_content(
-                        model="gemini-2.0-flash", contents=[gemini_file, prompt]
+                        model="gemini-2.5-flash", contents=[gemini_file, prompt]
                     )
 
                     st.success("הניתוח והסיכום הושלמו בהצלחה!")
@@ -177,7 +178,7 @@ with tab2:
                     """
 
                     response = client.models.generate_content(
-                        model="gemini-2.0-flash", contents=[gemini_file, prompt]
+                        model="gemini-2.5-flash", contents=[gemini_file, prompt]
                     )
 
                     st.success("הסיכום הושלם בהצלחה!")

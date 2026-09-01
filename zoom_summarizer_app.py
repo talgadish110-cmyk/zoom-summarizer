@@ -1,8 +1,7 @@
-import os
 import time
 import tempfile
-from google import genai
-from google.genai import errors
+import requests
+import json
 import streamlit as st
 
 st.set_page_config(
@@ -45,17 +44,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown(
-    '<div class="sub-header">העלה קובץ אודיו או בצע הקלטה חיה, ותן לבינה המלאכותית לסכם עבורך!</div>',
+    '<div class="sub-header">העלה קובץ אודיו, ותן לבינה המלאכותית לסכם עבורך את הכל!</div>',
     unsafe_allow_html=True,
 )
 
-# שליפת המפתח מתוך ה-Secrets שהגדרת ב-Streamlit
-api_key_input = st.secrets.get("GEMINI_API_KEY", "")
+# שליפת המפתח מתוך ה-Secrets שלך
+api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
-    if api_key_input:
-        st.success("מפתח ה-API מוגדר בהצלחה במערכת.")
+    if api_key:
+        st.success("מפתח ה-API מוגדר במערכת.")
     else:
         st.error("חסר מפתח ב-Secrets.")
 
@@ -72,9 +71,7 @@ with st.sidebar:
         ],
     )
 
-tab1, tab2, tab3 = st.tabs(
-    ["📁 העלאת קובץ (MP3/WAV)", "🎤 הקלטה חיה מהמיקרופון", "📖 הוראות"]
-)
+tab1, tab2 = st.tabs(["📁 העלאת קובץ (MP3/WAV)", "📖 הוראות"])
 
 with tab1:
     col1, col2 = st.columns([1, 1], gap="large")
@@ -90,19 +87,20 @@ with tab1:
         st.markdown("### 🤖 עיבוד וסיכום (מקובץ)")
 
         if st.button("התחל ניתוח וסיכום פגישה", type="primary", key="btn_file"):
-            if not api_key_input:
-                st.error("אנא הגדר את המפתח ב-Secrets.")
+            if not api_key:
+                st.error("אנא הגדר מפתח ב-Secrets.")
             elif uploaded_file is None:
                 st.warning("אנא בחר או העלה קובץ אודיו תחילה.")
             else:
                 try:
-                    # טעינת המפתח בספרייה החדשה
-                    os.environ["GEMINI_API_KEY"] = api_key_input
-                    client = genai.Client()
+                    st.info("🔄 מעבד את הקובץ ושולח ל-Gemini...")
                     
-                    st.info("🔄 מעבד וקורא את הקובץ לזיכרון...")
                     file_bytes = uploaded_file.getvalue()
                     mime_type = uploaded_file.type if uploaded_file.type else "audio/mp3"
+                    
+                    # המרה ל-Base64 לשליחה ישירה בבקשת HTTP
+                    import base64
+                    base64_audio = base64.b64encode(file_bytes).decode("utf-8")
 
                     prompt = f"""
                     אתה עוזר אקדמי מקצועי. ניתנת לך הקלטת שיעור / פגישה.
@@ -114,76 +112,51 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
-                    st.info("🧠 שולח לניתוח ב-Gemini...")
-
-                    # שימוש במודל הפלאש היציב
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=[
+                    # שימוש ישיר ב-REST API של gemini-2.5-flash עם המפתח שלך
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    
+                    payload = {
+                        "contents": [
                             {
-                                "inline_data": {
-                                    "data": file_bytes,
-                                    "mime_type": mime_type
-                                }
-                            },
-                            prompt
-                        ],
-                    )
+                                "parts": [
+                                    {"text": prompt},
+                                    {
+                                        "inline_data": {
+                                            "mime_type": mime_type,
+                                            "data": base64_audio
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
 
-                    st.success("הניתוח והסיכום הושלמו בהצלחה!")
-                    st.markdown("---")
-                    st.markdown("### 📝 תוצאות הסיכום")
-                    st.markdown(response.text)
+                    headers = {"Content-Type": "application/json"}
+                    
+                    response = requests.post(url, headers=headers, data=json.dumps(payload))
+                    
+                    if response.status_code == 200:
+                        res_json = response.json()
+                        summary_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        
+                        st.success("הניתוח והסיכום הושלמו בהצלחה!")
+                        st.markdown("---")
+                        st.markdown("### 📝 תוצאות הסיכום")
+                        st.markdown(summary_text)
 
-                    st.download_button(
-                        label="📥 הורד סיכום כקובץ טקסט",
-                        data=response.text,
-                        file_name="meeting_summary.txt",
-                        mime="text/plain",
-                    )
+                        st.download_button(
+                            label="📥 הורד סיכום כקובץ טקסט",
+                            data=summary_text,
+                            file_name="meeting_summary.txt",
+                            mime="text/plain",
+                        )
+                    else:
+                        st.error(f"שגיאת שרת מ-Google API: {response.text}")
 
                 except Exception as e:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
 
 with tab2:
-    st.markdown("### 🎙️ הקלטה חיה מהמיקרופון")
-    audio_value = st.audio_input("הקלט קול מהמיקרופון")
-
-    if audio_value is not None:
-        st.audio(audio_value)
-        if st.button("נתח והפק סיכום להקלטה החיה", type="primary", key="btn_mic"):
-            if not api_key_input:
-                st.error("אנא הגדר מפתח ב-Secrets.")
-            else:
-                try:
-                    os.environ["GEMINI_API_KEY"] = api_key_input
-                    client = genai.Client()
-                    audio_bytes = audio_value.getvalue()
-
-                    st.info("🧠 מנתח את ההקלטה החיה...")
-                    prompt = f"צור סיכום מפורט ומקצועי בעברית להקלטה זו לפי: {summary_type}"
-                    
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash", 
-                        contents=[
-                            {
-                                "inline_data": {
-                                    "data": audio_bytes,
-                                    "mime_type": "audio/wav"
-                                }
-                            },
-                            prompt
-                        ]
-                    )
-
-                    st.success("הסיכום הושלם בהצלחה!")
-                    st.markdown("### 📝 תוצאות הסיכום")
-                    st.markdown(response.text)
-
-                except Exception as e:
-                    st.error(f"אירעה שגיאה: {e}")
-
-with tab3:
     st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. המפתח מוגדר בבטחה ב-Secrets של האפליקציה.")
-    st.markdown("2. העלה קובץ MP3 ולץ על כפתור הניתוח.")
+    st.markdown("1. המפתח שלך מוגדר ב-Secrets.")
+    st.markdown("2. העלה קובץ אודיו ולץ על כפתור הניתוח.")

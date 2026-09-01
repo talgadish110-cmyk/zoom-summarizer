@@ -1,6 +1,7 @@
 import os
-import tempfile
-from google import genai
+import requests
+import json
+import base64
 import streamlit as st
 
 st.set_page_config(
@@ -91,10 +92,13 @@ with tab1:
                 st.warning("אנא בחר או העלה קובץ אודיו תחילה.")
             else:
                 try:
-                    st.info("🔄 מעבד וקורא את הקובץ לזיכרון...")
+                    st.info("🔄 מעבד את הקובץ ושולח ישירות לשרת...")
                     
                     file_bytes = uploaded_file.getvalue()
                     mime_type = uploaded_file.type if uploaded_file.type else "audio/mp3"
+                    
+                    # המרת הקובץ ל-Base64 לשליחה ישירה ובטוחה
+                    base64_audio = base64.b64encode(file_bytes).decode("utf-8")
 
                     prompt = f"""
                     אתה עוזר אקדמי מקצועי. ניתנת לך הקלטת שיעור / פגישה.
@@ -106,74 +110,52 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
-                    st.info("🧠 שולח לניתוח ב-Gemini...")
-
-                    # שימוש במשתנה הסביבה יחד עם הלקוח בצורה עוקפת
-                    os.environ["GEMINI_API_KEY"] = api_key
+                    # שימוש בכתובת הישירה של ה-API עם המפתח הקיים בפרמטר
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
                     
-                    # אם המפתח מתחיל ב-AQ, נשתמש בבקשת HTTP ישירה שעוקפת את בדיקת ה-SDK הרשמי
-                    if api_key.startswith("AQ"):
-                        import requests
-                        import json
-                        import base64
-                        
-                        base64_audio = base64.b64encode(file_bytes).decode("utf-8")
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-                        
-                        payload = {
-                            "contents": [
-                                {
-                                    "parts": [
-                                        {"text": prompt},
-                                        {
-                                            "inline_data": {
-                                                "mime_type": mime_type,
-                                                "data": base64_audio
-                                            }
+                    payload = {
+                        "contents": [
+                            {
+                                "parts": [
+                                    {"text": prompt},
+                                    {
+                                        "inline_data": {
+                                            "mime_type": mime_type,
+                                            "data": base64_audio
                                         }
-                                    ]
-                                }
-                            ]
-                        }
-                        headers = {"Content-Type": "application/json"}
-                        res = requests.post(url, headers=headers, data=json.dumps(payload))
-                        
-                        if res.status_code == 200:
-                            summary_text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
-                        else:
-                            raise Exception(f"שגיאת שרת ({res.status_code}): {res.text}")
-                    else:
-                        client = genai.Client()
-                        response = client.models.generate_content(
-                            model="gemini-2.5-flash",
-                            contents=[
-                                {
-                                    "inline_data": {
-                                        "data": file_bytes,
-                                        "mime_type": mime_type
                                     }
-                                },
-                                prompt
-                            ],
+                                ]
+                            }
+                        ]
+                    }
+
+                    headers = {"Content-Type": "application/json"}
+                    
+                    # שליחת הבקשה בשיטת HTTP רגילה שעוקפת כל ספריות אימות חיצוניות
+                    response = requests.post(url, headers=headers, data=json.dumps(payload))
+
+                    if response.status_code == 200:
+                        res_json = response.json()
+                        summary_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        
+                        st.success("הניתוח והסיכום הושלמו בהצלחה!")
+                        st.markdown("---")
+                        st.markdown("### 📝 תוצאות הסיכום")
+                        st.markdown(summary_text)
+
+                        st.download_button(
+                            label="📥 הורד סיכום כקובץ טקסט",
+                            data=summary_text,
+                            file_name="meeting_summary.txt",
+                            mime="text/plain",
                         )
-                        summary_text = response.text
-
-                    st.success("הניתוח והסיכום הושלמו בהצלחה!")
-                    st.markdown("---")
-                    st.markdown("### 📝 תוצאות הסיכום")
-                    st.markdown(summary_text)
-
-                    st.download_button(
-                        label="📥 הורד סיכום כקובץ טקסט",
-                        data=summary_text,
-                        file_name="meeting_summary.txt",
-                        mime="text/plain",
-                    )
+                    else:
+                        st.error(f"שגיאת שרת ({response.status_code}): {response.text}")
 
                 except Exception as e:
                     st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
 
 with tab2:
     st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. המפתח מוגדר ב-Secrets.")
+    st.markdown("1. המפתח שלך מוגדר ב-Secrets.")
     st.markdown("2. העלה קובץ אודיו ולץ על כפתור הניתוח.")

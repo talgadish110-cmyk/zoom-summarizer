@@ -49,14 +49,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-api_key = st.secrets.get("GEMINI_API_KEY", "")
+# אפשרות להזין מפתח ישירות מהצד או לקחת מה-Secrets
+secret_api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
+    api_key = st.text_input("הכנס מפתח API של Gemini", value=secret_api_key, type="password")
+    
     if api_key:
-        st.success("מפתח ה-API מוגדר במערכת.")
+        st.success("מפתח ה-API מוגדר.")
     else:
-        st.error("חסר מפתח ב-Secrets.")
+        st.warning("נא להזין מפתח API.")
 
     st.markdown("---")
     st.markdown("### 📋 סוג הסיכום המבוקש")
@@ -71,7 +74,6 @@ with st.sidebar:
         ],
     )
 
-# חלוקה לשתי לשוניות: העלאת קובץ או הקלטה חיה
 tab1, tab2, tab3 = st.tabs(["📁 העלאת קובץ (MP3/WAV)", "🎙️ הקלטה ישירה מהמיקרופון", "📖 הוראות"])
 
 with tab1:
@@ -89,12 +91,12 @@ with tab1:
 
         if st.button("התחל ניתוח וסיכום פגישה", type="primary", key="btn_file"):
             if not api_key:
-                st.error("אנא הגדר מפתח ב-Secrets.")
+                st.error("אנא הכנס מפתח API בהגדרות בצד.")
             elif uploaded_file is None:
                 st.warning("אנא בחר או העלה קובץ אודיו תחילה.")
             else:
                 try:
-                    st.info("🔄 מעבד את הקובץ ושולח ישירות לשרת...")
+                    st.info("🔄 מעבד את הקובץ ושולח לשרת...")
                     file_bytes = uploaded_file.getvalue()
                     mime_type = uploaded_file.type if uploaded_file.type else "audio/mp3"
                     
@@ -110,7 +112,8 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    # שימוש במודל gemini-1.5-flash שהוא היציב ביותר לכל סוגי המפתחות
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
                     payload = {
                         "contents": [
                             {
@@ -152,7 +155,6 @@ with tab2:
     st.markdown("### 🎙️ הקלטה קולית חיה")
     st.markdown("לחץ על כפתור ההקלטה למטה, דבר אל המיקרופון, ולחץ עצירה בסיום:")
 
-    # רכיב ההקלטה החיה
     audio_recorded = mic_recorder(
         start_prompt="🔴 התחל הקלטה",
         stop_prompt="⏹️ עצור הקלטה",
@@ -165,19 +167,16 @@ with tab2:
         
         if st.button("נתח וסכם את ההקלטה הקולית", type="primary", key="btn_mic"):
             if not api_key:
-                st.error("אנא הגדר מפתח ב-Secrets.")
+                st.error("אנא הכנס מפתח API בהגדרות בצד.")
             else:
                 try:
-                    st.info("🔄 מעבד את ההקלטה שלך ושולח ל-Gemini...")
+                    st.info("🔄 מעבד את ההקלטה ושולח ל-Gemini...")
                     mic_bytes = audio_recorded['bytes']
                     base64_mic = base64.b64encode(mic_bytes).decode("utf-8")
 
-                    prompt = f"""
-                    אתה עוזר אקדמי מקצועי. ניתנה לך הקלטה קולית קצרה.
-                    אנא צור עבורי סיכום מסודר וממוקד לפי הפורמט הבא: {summary_type}.
-                    """
+                    prompt = f"צור סיכום מסודר וממוקד בעברית להקלטה קולית זו לפי הפורמט: {summary_type}."
 
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
                     payload = {
                         "contents": [
                             {
@@ -218,5 +217,5 @@ with tab2:
 
 with tab3:
     st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. המפתח שלך מוגדר ב-Secrets.")
-    st.markdown("2. תוכל לבחור בין העלאת קובץ אודיו מוכן לבין הקלטה חיה דרך הלשונית השנייה.")
+    st.markdown("1. המפתח מוגדר בסרגל הצדדי.")
+    st.markdown("2. העלה קובץ אודיו או הקלט ישירות דרך הלשונית.")

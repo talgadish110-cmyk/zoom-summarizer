@@ -1,5 +1,4 @@
 import os
-import time
 import tempfile
 from google import genai
 import streamlit as st
@@ -92,10 +91,7 @@ with tab1:
                 st.warning("אנא בחר או העלה קובץ אודיו תחילה.")
             else:
                 try:
-                    os.environ["GEMINI_API_KEY"] = api_key
-                    client = genai.Client()
-
-                    st.info("🔄 מעבד וקורא את הקובץ ישירות לזיכרון...")
+                    st.info("🔄 מעבד וקורא את הקובץ לזיכרון...")
                     
                     file_bytes = uploaded_file.getvalue()
                     mime_type = uploaded_file.type if uploaded_file.type else "audio/mp3"
@@ -112,28 +108,64 @@ with tab1:
 
                     st.info("🧠 שולח לניתוח ב-Gemini...")
 
-                    # שליחה ישירה בזיכרון בלי להשתמש בשרת ה-Files (עוקף את שגיאת 401 סופית)
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=[
-                            {
-                                "inline_data": {
-                                    "data": file_bytes,
-                                    "mime_type": mime_type
+                    # שימוש במשתנה הסביבה יחד עם הלקוח בצורה עוקפת
+                    os.environ["GEMINI_API_KEY"] = api_key
+                    
+                    # אם המפתח מתחיל ב-AQ, נשתמש בבקשת HTTP ישירה שעוקפת את בדיקת ה-SDK הרשמי
+                    if api_key.startswith("AQ"):
+                        import requests
+                        import json
+                        import base64
+                        
+                        base64_audio = base64.b64encode(file_bytes).decode("utf-8")
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                        
+                        payload = {
+                            "contents": [
+                                {
+                                    "parts": [
+                                        {"text": prompt},
+                                        {
+                                            "inline_data": {
+                                                "mime_type": mime_type,
+                                                "data": base64_audio
+                                            }
+                                        }
+                                    ]
                                 }
-                            },
-                            prompt
-                        ],
-                    )
+                            ]
+                        }
+                        headers = {"Content-Type": "application/json"}
+                        res = requests.post(url, headers=headers, data=json.dumps(payload))
+                        
+                        if res.status_code == 200:
+                            summary_text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+                        else:
+                            raise Exception(f"שגיאת שרת ({res.status_code}): {res.text}")
+                    else:
+                        client = genai.Client()
+                        response = client.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=[
+                                {
+                                    "inline_data": {
+                                        "data": file_bytes,
+                                        "mime_type": mime_type
+                                    }
+                                },
+                                prompt
+                            ],
+                        )
+                        summary_text = response.text
 
                     st.success("הניתוח והסיכום הושלמו בהצלחה!")
                     st.markdown("---")
                     st.markdown("### 📝 תוצאות הסיכום")
-                    st.markdown(response.text)
+                    st.markdown(summary_text)
 
                     st.download_button(
                         label="📥 הורד סיכום כקובץ טקסט",
-                        data=response.text,
+                        data=summary_text,
                         file_name="meeting_summary.txt",
                         mime="text/plain",
                     )

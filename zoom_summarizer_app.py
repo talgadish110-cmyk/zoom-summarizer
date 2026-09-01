@@ -51,13 +51,15 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# תפריט צד (Sidebar) להגדרות (כולל שמירה קבועה אם תרצה)
+# תפריט צד (Sidebar) להגדרות - מפתח קבוע מראש
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
+    
     api_key_input = st.text_input(
-        "הכנס מפתח Google Gemini API Key",
+        "מפתח Google Gemini API Key (קבוע)",
+        value="AQ.Ab8RN6JOCknVIFli07JNT-uy1KU5enVYMoEVDdCPBQAURvn_Pw",
         type="password",
-        help="ניתן להשיג בחינם מ-Google AI Studio",
+        help="המפתח שמור וקבוע באפליקציה."
     )
 
     st.markdown("---")
@@ -93,7 +95,7 @@ with tab1:
 
         if st.button("התחל ניתוח וסיכום פגישה", type="primary", key="btn_file"):
             if not api_key_input:
-                st.error("אנא הכנס מפתח API של Google Gemini בסיידבר הימני.")
+                st.error("חסר מפתח API.")
             elif uploaded_file is None:
                 st.warning("אנא בחר או העלה קובץ וידאו או אודיו תחילה.")
             else:
@@ -111,14 +113,19 @@ with tab1:
                     st.success("הקובץ הועלה בהצלחה!")
 
                     st.info(
-                        "🧠 מנתח את ההקלטה (במידת העומס ייתכן ניסיון נוסף אוטומטי)..."
+                        "🧠 מנתח את ההקלטה בצורה מקיפה ומלאה..."
                     )
 
+                    # פקודה מעודכנת המכוונת לסיכום רחב, מעמיק ופרטני מאוד
                     prompt = f"""
-                    אתה עוזר אישי מקצועי וחכם. ניתנת לך הקלטת פגישה (וידאו או אודיו).
-                    אנא צור עבורי סיכום לפי הפורמט הבא: {summary_type}.
-                    אם נבחר סיכום מלא מהתחלה ועד הסוף, סקור את כל מהלך הפגישה בסדר כרונולוגי מפורט מהדקה הראשונה ועד הסוף, כולל כל השלבים, הדיונים וההחלטות בצורה מלאה ולא מקוצרת.
-                    כתוב בצורה נקייה, מסודרת ומקצועית בעברית.
+                    אתה עוזר אקדמי ומקצועי ברמה הגבוהה ביותר. ניתנת לך הקלטת שיעור / פגישה מלאה.
+                    אנא צור עבורי סיכום רחב, מעמיק ומפורט במיוחד בהתאם לסגנון: {summary_type}.
+                    
+                    הנחיות קריטיות לתוכן:
+                    1. אל תסתפק בקיצורים או בראשי פרקים שטחיים. פרוס את כל מה שנאמר בשיעור בצורה רציפה, מפורטת ומלאה מהדקה הראשונה ועד הסוף.
+                    2. כלול את כל ההסברים המקצועיים, הדוגמאות, המושגים, ההגדרות והדיונים שהועלו במהלך השיעור.
+                    3. סדר את המידע לפי נושאים כרונולוגיים ברורים, כאשר תחת כל נושא יש פירוט מלא של כל ההרחבות וההערות שנאמרו עליו.
+                    4. כתוב את הסיכום בשפה נברית עשירה, נקייה, מקצועית ומובנית היטב, כך שישמש כחומר לימוד או תיעוד מלא לחלוטין לכל השיעור.
                     """
 
                     # מנגנון ניסיון חוזר (Retry) אוטומטי לשגיאות עומס (503)
@@ -147,15 +154,15 @@ with tab1:
                             raise api_err
 
                     if success and response:
-                        st.success("הניתוח והסיכום הושלמו בהצלחה!")
+                        st.success("הניתוח והסיכום הרחב הושלמו בהצלחה!")
                         st.markdown("---")
-                        st.markdown("### 📝 תוצאות הסיכום")
+                        st.markdown("### 📝 תוצאות הסיכום המלא")
                         st.markdown(response.text)
 
                         st.download_button(
                             label="📥 הורד סיכום כקובץ טקסט",
                             data=response.text,
-                            file_name="meeting_summary.txt",
+                            file_name="full_detailed_lesson_summary.txt",
                             mime="text/plain",
                         )
 
@@ -180,7 +187,7 @@ with tab2:
             "נתח והפק סיכום להקלטה החיה", type="primary", key="btn_mic"
         ):
             if not api_key_input:
-                st.error("אנא הכנס מפתח API של Google Gemini בסיידבר הימני.")
+                st.error("חסר מפתח API.")
             else:
                 try:
                     client = genai.Client(api_key=api_key_input)
@@ -195,11 +202,11 @@ with tab2:
                     gemini_file = client.files.upload(file=temp_path)
                     st.success("ההקלטה הועלתה בהצלחה!")
 
-                    st.info("🧠 מנתח את ההקלטה החיה...")
+                    st.info("🧠 מנתח את ההקלטה החיה בצורה מקיפה...")
 
                     prompt = f"""
-                    הקלטה זו בוצעה בשידור חי דרך מיקרופון. אנא צור עבורה סיכום מפורט ומקצועי בעברית בהתאם לבחירה: {summary_type}.
-                    אם נבחר סיכום מלא מהתחלה ועד הסוף, הצג סקירה רציפה ומלאה של כל מה שנאמר מהמילה הראשונה ועד האחרונה.
+                    הקלטה זו בוצעה בשידור חי דרך מיקרופון. אנא צור עבורה סיכום רחב, מעמיק ומלא במיוחד בהתאם לבחירה: {summary_type}.
+                    כלול את כל ההסברים, הדוגמאות והפרטים שנאמרו מהמילה הראשונה ועד האחרונה בצורה רציפה ולא מקוצרת.
                     """
 
                     response = client.models.generate_content(
@@ -208,13 +215,13 @@ with tab2:
 
                     st.success("הסיכום הושלם בהצלחה!")
                     st.markdown("---")
-                    st.markdown("### 📝 תוצאות הסיכום")
+                    st.markdown("### 📝 תוצאות הסיכום המלא")
                     st.markdown(response.text)
 
                     st.download_button(
                         label="📥 הורד סיכום כקובץ טקסט",
                         data=response.text,
-                        file_name="live_recording_summary.txt",
+                        file_name="live_recording_full_summary.txt",
                         mime="text/plain",
                     )
 
@@ -226,9 +233,7 @@ with tab2:
 
 with tab3:
     st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. בחר קובץ (MP4, MP3 וכו') או עבור לטאב ההקלטה החיה.")
-    st.markdown("2. הזן את מפתח ה-API שלך בסיידבר הימני.")
-    st.markdown(
-        "3. בחר את פורמט הסיכום הרצוי (כמו סיכום מלא מהתחלה ועד הסוף)."
-    )
-    st.markdown("4. לחץ על כפתור הניתוח והמתן לתוצאה.")
+    st.markdown("1. בחר קובץ שמע שהומת ל-MP3.")
+    st.markdown("2. מפתח ה-API מוגדר וקבוע מראש במערכת!")
+    st.markdown("3. בחר את פורמט הסיכום המבוקש (כמו סיכום מלא מהתחלה ועד הסוף).")
+    st.markdown("4. לחץ על כפתור הניתוח וקבל סיכום עמוק, רחב ומפורט של כל השיעור.")

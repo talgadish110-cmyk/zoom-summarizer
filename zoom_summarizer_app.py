@@ -51,7 +51,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# תפריט צד (Sidebar) להגדרות - הזנת מפתח חופשית
+# תפריט צד (Sidebar) להגדרות
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
     
@@ -99,7 +99,10 @@ with tab1:
                 st.warning("אנא בחר או העלה קובץ וידאו או אודיו תחילה.")
             else:
                 try:
-                    client = genai.Client(api_key=api_key_input)
+                    # הגדרת המפתח כמשתנה סביבה כדי שה-SDK יאמת אותה ללא שגיאות 401
+                    os.environ["GEMINI_API_KEY"] = api_key_input
+                    client = genai.Client()
+
                     file_extension = uploaded_file.name.split(".")[-1]
                     with tempfile.NamedTemporaryFile(
                         delete=False, suffix=f".{file_extension}"
@@ -184,7 +187,8 @@ with tab2:
                 st.error("אנא הכנס מפתח API תקין בסיידבר הימני.")
             else:
                 try:
-                    client = genai.Client(api_key=api_key_input)
+                    os.environ["GEMINI_API_KEY"] = api_key_input
+                    client = genai.Client()
 
                     with tempfile.NamedTemporaryFile(
                         delete=False, suffix=".wav"

@@ -51,15 +51,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# תפריט צד (Sidebar) להגדרות - מפתח קבוע מראש
+# תפריט צד (Sidebar) להגדרות - הזנת מפתח חופשית
 with st.sidebar:
     st.header("⚙️ הגדרות מערכת")
     
     api_key_input = st.text_input(
-        "מפתח Google Gemini API Key (קבוע)",
-        value="AQ.Ab8RN6JOCknVIFli07JNT-uy1KU5enVYMoEVDdCPBQAURvn_Pw",
+        "הכנס מפתח Google Gemini API Key",
         type="password",
-        help="המפתח שמור וקבוע באפליקציה."
+        help="הכנס כאן את המפתח התקין מ-Google AI Studio"
     )
 
     st.markdown("---")
@@ -95,7 +94,7 @@ with tab1:
 
         if st.button("התחל ניתוח וסיכום פגישה", type="primary", key="btn_file"):
             if not api_key_input:
-                st.error("חסר מפתח API.")
+                st.error("אנא הכנס מפתח API תקין בסיידבר הימני.")
             elif uploaded_file is None:
                 st.warning("אנא בחר או העלה קובץ וידאו או אודיו תחילה.")
             else:
@@ -114,7 +113,6 @@ with tab1:
 
                     st.info("🧠 מנתח את ההקלטה...")
 
-                    # פקודה ממוקדת ויעילה למניעת חריגת מכסה
                     prompt = f"""
                     אתה עוזר אקדמי מקצועי. ניתנת לך הקלטת שיעור / פגישה.
                     אנא צור עבורי סיכום מפורט, מסודר ומעמיק לפי הפורמט הבא: {summary_type}.
@@ -125,7 +123,6 @@ with tab1:
                     3. שמור על מבנה נקי, מקצועי וברור בעברית.
                     """
 
-                    # מנגנון ניסיון חוזר (Retry) אוטומטי לשגיאות עומס (503)
                     max_retries = 3
                     retry_delay = 3
                     success = False
@@ -184,7 +181,7 @@ with tab2:
             "נתח והפק סיכום להקלטה החיה", type="primary", key="btn_mic"
         ):
             if not api_key_input:
-                st.error("חסר מפתח API.")
+                st.error("אנא הכנס מפתח API תקין בסיידבר הימני.")
             else:
                 try:
                     client = genai.Client(api_key=api_key_input)
@@ -230,7 +227,6 @@ with tab2:
 
 with tab3:
     st.markdown("### 📖 מדריך הרצה מהיר")
-    st.markdown("1. בחר קובץ שמע (MP3) או עבור לטאב ההקלטה החיה.")
-    st.markdown("2. מפתח ה-API מוגדר וקבוע מראש במערכת!")
-    st.markdown("3. בחר את פורמט הסיכום הרצוי.")
-    st.markdown("4. לחץ על כפתור הניתוח והמתן לתוצאה.")
+    st.markdown("1. הכנס את מפתח ה-API שלך בסיידבר הימני.")
+    st.markdown("2. בחר קובץ שמע (MP3) או עבור לטאב ההקלטה החיה.")
+    st.markdown("3. בחר את פורמט הסיכום הרצוי ולץ על כפתור הניתוח.")

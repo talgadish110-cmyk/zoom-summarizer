@@ -14,8 +14,7 @@ st.write(
     "ממשק ניהול לניתוח קבצים, הפקת סיכומים והרצת סקריפטים באמצעות Google GenAI."
 )
 
-# הגדרת מפתח ה-API (מומלץ לשלוף מ-Streamlit Secrets או להגדיר בצורה בטוחה)
-# אפשר להגדיר ב- st.secrets["GEMINI_API_KEY"] או להכניס כאן את המפתח שלך
+# הגדרת מפתח ה-API מתוך Streamlit Secrets
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 if not api_key:
@@ -37,7 +36,7 @@ else:
         st.success("הקובץ הועלה בהצלחה!")
 
         if st.button("התחל ניתוח עמוק והפקת סיכום מורחב"):
-            with st.spinner("מנתח את ההקלטה בניתוח מעמקי ומפיק את הסיכום המורחב..."):
+            with st.spinner("מנתח את ההקלטה בניתוח מעמיק ומפיק את הסיכום המורחב..."):
                 max_retries = 3
                 retry_delay = 2
                 success = False
@@ -57,14 +56,12 @@ else:
                         if "503" in str(e) or "UNAVAILABLE" in str(e):
                             if attempt < max_retries - 1:
                                 time.sleep(retry_delay)
-                                retry_delay *= (
-                                    2  # המתנה אקספוננציאלית בין ניסיונות
-                                )
+                                retry_delay *= 2  # המתנה אקספוננציאלית
                                 continue
                         st.error(f"אירעה שגיאה בתהליך הניתוח: {e}")
                         break
                     except Exception as e:
-                        st.error(fا"שגיאה בלתי צפויה: {e}")
+                        st.error(f"שגיאה בלתי צפויה: {e}")
                         break
 
                 if success and response:

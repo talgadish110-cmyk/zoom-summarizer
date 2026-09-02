@@ -90,7 +90,7 @@ with col1:
                 else:
                     st.success("✅ התמלול המלא הושלם בהצלחה! מעביר לניתוח וסיכום רחב ב-Gemini...")
 
-                    # 2. שלב הסיכום הרחב באמצעות הספרייה החדשה של Google GenAI
+                    # 2. שלב הסיכום הרחב באמצעות הספרייה החדשה של Google GenAI והמודל המעודכן
                     g_client = genai.Client(api_key=gemini_api_key)
 
                     prompt = f"""
@@ -108,7 +108,7 @@ with col1:
 
                     with st.spinner("🧠 Gemini מייצר עבורך סיכום רחב ומעמיק..."):
                         response = g_client.models.generate_content(
-                            model='gemini-2.5-flash',
+                            model='gemini-3.6-flash',
                             contents=prompt,
                         )
                         summary = response.text
@@ -157,7 +157,7 @@ with col2:
                 
                 with st.spinner("Gemini מייצר סיכום..."):
                     response = g_client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-3.6-flash',
                         contents=f"סכם בהרחבה ובצורה מקצועית את קטע הדיבור הבא בעברית:\n{res}"
                     )
                     summary = response.text

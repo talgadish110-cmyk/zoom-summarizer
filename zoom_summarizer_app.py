@@ -16,7 +16,6 @@ st.set_page_config(
 st.title("🎙️ מערכת תמלול אמיתי (Whisper) וסיכום רחב (Gemini)")
 st.write("השמעת הקלטות או קבצי זום כבדים, תמלול מדויק מילה במילה, וסיכום אקדמי רחב ועמוק באמצעות Gemini!")
 
-# שדות להכנסת המפתחות (ריקים מבחינה אבטחתית כדי לא לחשוף בגיטהאב)
 col_keys1, col_keys2 = st.columns(2)
 with col_keys1:
     groq_api_key = st.text_input(
@@ -105,11 +104,22 @@ with col1:
                     {transcribed_text}
                     """
 
-                    with st.spinner("🧠 Gemini מייצר עבורך סיכום רחב ומעמיק..."):
-                        response = g_client.models.generate_content(
-                            model='gemini-3.6-flash',
-                            contents=prompt,
-                        )
+                    with st.spinner("🧠 Gemini מייצר עבורך סיכום רחב ומעמיק (מנסה להתחבר למרות העומס)..."):
+                        # מנגנון ניסיון חוזר אוטומטי למקרה של עומס (503)
+                        response = None
+                        for attempt in range(3):
+                            try:
+                                response = g_client.models.generate_content(
+                                    model='gemini-3.6-flash',
+                                    contents=prompt,
+                                )
+                                break
+                            except Exception as api_err:
+                                if "503" in str(api_err) and attempt < 2:
+                                    time.sleep(3) # ממתין 3 שניות ומנסה שוב
+                                else:
+                                    raise api_err
+
                         summary = response.text
 
                     st.markdown("---")

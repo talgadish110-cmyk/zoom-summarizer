@@ -16,17 +16,18 @@ st.set_page_config(
 st.title("🎙️ מערכת תמלול אמיתי (Whisper) וסיכום רחב (Gemini)")
 st.write("השמעת הקלטות או קבצי זום כבדים, תמלול מדויק מילה במילה, וסיכום אקדמי רחב ועמוק באמצעות Gemini!")
 
-# שדות להכנסת המפתחות
+# שדות להכנסת המפתחות (ריקים מבחינה אבטחתית כדי לא לחשוף בגיטהאב)
 col_keys1, col_keys2 = st.columns(2)
 with col_keys1:
     groq_api_key = st.text_input(
-        "הכנס מפתח Groq API (לשם תמלול Whisper):", 
-        value="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", 
-        type="password"
+        "הכנס מפתח Groq API החדש שלך:", 
+        value="", 
+        type="password",
+        placeholder="gsk_..."
     )
 with col_keys2:
     gemini_api_key = st.text_input(
-        "הכנס מפתח Google API (שקיבלת מגוגל):", 
+        "הכנס מפתח Google API:", 
         value="", 
         type="password",
         placeholder="AQ.Ab8RN..."
@@ -44,7 +45,6 @@ with col1:
 
         if st.button("התחל תמלול וסיכום רחב עם Gemini", type="primary"):
             try:
-                # 1. שלב התמלול באמצעות Whisper של Groq בחלקים קטנים ובטוחים
                 client = Groq(api_key=groq_api_key)
                 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
@@ -90,7 +90,6 @@ with col1:
                 else:
                     st.success("✅ התמלול המלא הושלם בהצלחה! מעביר לניתוח וסיכום רחב ב-Gemini...")
 
-                    # 2. שלב הסיכום הרחב באמצעות הספרייה החדשה של Google GenAI והמודל המעודכן
                     g_client = genai.Client(api_key=gemini_api_key)
 
                     prompt = f"""

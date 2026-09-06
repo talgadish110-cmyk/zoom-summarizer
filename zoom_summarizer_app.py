@@ -53,10 +53,11 @@ with col1:
                 file_bytes = uploaded_file.getvalue()
                 total_size = len(file_bytes)
                 
-                chunk_size = 10 * 1024 * 1024
+                # הקטנת החלקים ל-4MB כדי לעקוף לחלוטין את מגבלת הקצב של Groq
+                chunk_size = 4 * 1024 * 1024
                 num_chunks = math.ceil(total_size / chunk_size)
 
-                st.info(f"✂️ מפצל את הקובץ ל-{num_chunks} חלקים לצורך תמלול מלא מדויק...")
+                st.info(f"✂️ מפצל את הקובץ ל-{num_chunks} חלקים קטנים ומאובטחים...")
 
                 full_transcript = []
                 progress_bar = st.progress(0)
@@ -69,15 +70,28 @@ with col1:
                     chunk_filename = f"chunk_{i}.mp3"
                     st.text(f"מתמלל חלק {i+1} מתוך {num_chunks}...")
 
-                    res = client.audio.transcriptions.create(
-                        file=(chunk_filename, chunk_data),
-                        model="whisper-large-v3",
-                        language="he",
-                        response_format="text"
-                    )
-                    full_transcript.append(res)
+                    # ניסיון חוזר מקומי לחלק בודד אם יש עומס רגעי
+                    chunk_res = None
+                    for chunk_attempt in range(3):
+                        try:
+                            chunk_res = client.audio.transcriptions.create(
+                                file=(chunk_filename, chunk_data),
+                                model="whisper-large-v3",
+                                language="he",
+                                response_format="text"
+                            )
+                            break
+                        except Exception as c_err:
+                            if "rate_limit" in str(c_err).lower() or "413" in str(c_err) or "503" in str(c_err):
+                                time.sleep(5) # המתנה של 5 שניות במקרה של חסימת קצב
+                            else:
+                                raise c_err
+
+                    if chunk_res:
+                        full_transcript.append(chunk_res)
+                    
                     progress_bar.progress((i + 1) / num_chunks)
-                    time.sleep(1.5)
+                    time.sleep(4) # השהייה של 4 שניות בין חלק לחלק למניעת חסימת Rate Limit
 
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
@@ -104,8 +118,7 @@ with col1:
                     {transcribed_text}
                     """
 
-                    with st.spinner("🧠 Gemini מייצר עבורך סיכום רחב ומעמיק (מנסה להתחבר למרות העומס)..."):
-                        # מנגנון ניסיון חוזר אוטומטי למקרה של עומס (503)
+                    with st.spinner("🧠 Gemini מייצר עבורך סיכום רחב ומעמיק..."):
                         response = None
                         for attempt in range(3):
                             try:
@@ -116,7 +129,7 @@ with col1:
                                 break
                             except Exception as api_err:
                                 if "503" in str(api_err) and attempt < 2:
-                                    time.sleep(3) # ממתין 3 שניות ומנסה שוב
+                                    time.sleep(3)
                                 else:
                                     raise api_err
 

@@ -43,7 +43,7 @@ if uploaded_file is not None:
                 g_client = genai.Client(api_key=gemini_api_key)
 
                 with st.spinner("⏳ מעלה את קובץ השיעור הענק לגוגל ומאזין לו מהתחלה ועד הסוף... (עשוי לקחת דקה-שתיים)"):
-                    # העלאת הקובץ ישירות ל-Gemini API (מצוין לקבצים גדולים וכבדים)
+                    # העלאת הקובץ ישירות ל-Gemini API
                     audio_file = g_client.files.upload(file=tmp_path)
                     
                     # המתנה עד שהקובץ יהיה מוכן לעיבוד בשרתים של גוגל
@@ -66,9 +66,9 @@ if uploaded_file is not None:
                     4. **משימות המשך או סיכומי Action Items:** מטלות, תרגולים או נושאים להמשך למידה אם הוזכרו בשיעור.
                     """
 
-                    # שליחה למודל של גוגל
+                    # שליחה למודל המעודכן gemini-3.6-flash
                     response = g_client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-3.6-flash',
                         contents=[audio_file, prompt]
                     )
                     
@@ -78,7 +78,7 @@ if uploaded_file is not None:
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
 
-                # שמירת הסיכום בזיכרון של הסטרימלייט כדי שיישאר גם אחרי הקראה
+                # שמירת הסיכום בזיכרון של הסטרימלייט
                 st.session_state['generated_summary'] = summary
 
             except Exception as e:
@@ -109,7 +109,6 @@ if 'generated_summary' in st.session_state:
     if st.button("🔊 הפק הקראה קולית לסיכום"):
         with st.spinner("מייצר קובץ שמע להקראה..."):
             try:
-                # יצירת קובץ קולי בעברית מתוך טקסט הסיכום
                 tts = gTTS(text=summary, lang='he', slow=False)
                 tts_fp = io.BytesIO()
                 tts.write_to_fp(tts_fp)

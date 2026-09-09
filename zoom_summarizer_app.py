@@ -15,7 +15,6 @@ st.set_page_config(
 st.title("🎓 סיכום שיעורי זום והקלטות עם Gemini והקראה קולית")
 st.write("העלה הקלטת זום או שיעור כבד, קבל סיכום אקדמי מלא מהתחלה ועד הסוף, ותוכל אפילו לשמוע אותו בהקראה קולית!")
 
-# שדה להכנסת מפתח יחיד של גוגל מ-AI Studio
 gemini_api_key = st.text_input(
     "הכנס מפתח Google API (מ-Google AI Studio):", 
     value="", 
@@ -35,7 +34,6 @@ if uploaded_file is not None:
     if gemini_api_key:
         if st.button("🚀 צור סיכום מלא לכל השיעור (מהתחלה ועד הסוף)", type="primary"):
             try:
-                # שמירת הקובץ זמנית במערכת
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
                     tmp.write(uploaded_file.getvalue())
                     tmp_path = tmp.name
@@ -43,10 +41,8 @@ if uploaded_file is not None:
                 g_client = genai.Client(api_key=gemini_api_key)
 
                 with st.spinner("⏳ מעלה את קובץ השיעור הענק לגוגל ומאזין לו מהתחלה ועד הסוף... (עשוי לקחת דקה-שתיים)"):
-                    # העלאת הקובץ ישירות ל-Gemini API
                     audio_file = g_client.files.upload(file=tmp_path)
                     
-                    # המתנה עד שהקובץ יהיה מוכן לעיבוד בשרתים של גוגל
                     while audio_file.state.name == "PROCESSING":
                         time.sleep(3)
                         audio_file = g_client.files.get(name=audio_file.name)
@@ -54,7 +50,6 @@ if uploaded_file is not None:
                     if audio_file.state.name == "FAILED":
                         raise Exception("עיבוד הקובץ נכשל בצד של גוגל.")
 
-                    # הנחיה לסיכום מלא, מפורט ומקיף לכל אורך השיעור
                     prompt = """
                     אתה עוזר אקדמי ומקצועי בכיר. להלן הקלטה מלאה של שיעור/הרצאה שהועלתה אלייך (מהתחלה ועד הסוף). 
                     אנא האזן לקובץ כולו בצורה יסודית, וצור עבורי **סיכום מלא, רחב, מקיף ומעמיק מאוד** בעברית. 
@@ -66,50 +61,40 @@ if uploaded_file is not None:
                     4. **משימות המשך או סיכומי Action Items:** מטלות, תרגולים או נושאים להמשך למידה אם הוזכרו בשיעור.
                     """
 
-                    # שליחה למודל המעודכן gemini-3.6-flash
                     response = g_client.models.generate_content(
                         model='gemini-3.6-flash',
                         contents=[audio_file, prompt]
                     )
                     
-                    summary = response.text
+                    st.session_state['generated_summary'] = response.text
 
-                # ניקוי הקובץ הזמני מהדיסק
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
-
-                # שמירת הסיכום בזיכרון של הסטרימלייט
-                st.session_state['generated_summary'] = summary
 
             except Exception as e:
                 st.error(f"שגיאה בתהליך: {e}")
     else:
         st.warning("⚠️ נא להזין את מפתח ה-Google API בשדה למעלה כדי להתחיל.")
 
-# הצגת הסיכום אם קיים בזיכרון
 if 'generated_summary' in st.session_state:
-    summary = st.session_state['generated_summary']
-    
     st.success("✅ הסיכום המלא הושלם בהצלחה!")
     st.markdown("---")
     st.markdown("### 📋 סיכום השיעור המלא מאת Gemini")
-    st.markdown(summary)
+    st.write(st.session_state['generated_summary'])
 
-    # כפתור הורדה כקובץ טקסט
     st.download_button(
         label="📥 הורד סיכום כקובץ טקסט",
-        data=summary,
+        data=st.session_state['generated_summary'],
         file_name="Lesson_Full_Summary.txt",
         mime="text/plain"
     )
 
-    # אפשרות הקראה קולית (Text-to-Speech)
     st.markdown("---")
     st.subheader("🎧 הקראה קולית של הסיכום")
     if st.button("🔊 הפק הקראה קולית לסיכום"):
         with st.spinner("מייצר קובץ שמע להקראה..."):
             try:
-                tts = gTTS(text=summary, lang='he', slow=False)
+                tts = gTTS(text=st.session_state['generated_summary'], lang='he', slow=False)
                 tts_fp = io.BytesIO()
                 tts.write_to_fp(tts_fp)
                 tts_fp.seek(0)

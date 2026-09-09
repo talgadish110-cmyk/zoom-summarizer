@@ -1,190 +1,121 @@
 import os
 import streamlit as st
-from groq import Groq
 from google import genai
 import tempfile
-import math
 import time
-from streamlit_mic_recorder import mic_recorder
+from gtts import gTTS
+import io
 
 st.set_page_config(
-    page_title="מערכת תמלול וסיכום עם Gemini",
-    page_icon="🎙️",
+    page_title="סיכום שיעורי זום והקראה עם Gemini",
+    page_icon="🎓",
     layout="wide"
 )
 
-st.title("🎙️ מערכת תמלול אמיתי (Whisper) וסיכום רחב (Gemini)")
-st.write("השמעת הקלטות או קבצי זום כבדים, תמלול מדויק מילה במילה, וסיכום אקדמי רחב ועמוק באמצעות Gemini!")
+st.title("🎓 סיכום שיעורי זום והקלטות עם Gemini והקראה קולית")
+st.write("העלה הקלטת זום או שיעור כבד, קבל סיכום אקדמי מלא מהתחלה ועד הסוף, ותוכל אפילו לשמוע אותו בהקראה קולית!")
 
-col_keys1, col_keys2 = st.columns(2)
-with col_keys1:
-    groq_api_key = st.text_input(
-        "הכנס מפתח Groq API החדש שלך:", 
-        value="", 
-        type="password",
-        placeholder="gsk_..."
-    )
-with col_keys2:
-    gemini_api_key = st.text_input(
-        "הכנס מפתח Google API:", 
-        value="", 
-        type="password",
-        placeholder="AQ.Ab8RN..."
-    )
+# שדה להכנסת מפתח יחיד של גוגל מ-AI Studio
+gemini_api_key = st.text_input(
+    "הכנס מפתח Google API (מ-Google AI Studio):", 
+    value="", 
+    type="password",
+    placeholder="AIzaSy..."
+)
 
-col1, col2 = st.columns(2)
+uploaded_file = st.file_uploader(
+    "📁 בחר קובץ הקלטת זום או שיעור (אודיו / וידאו גדולים)", 
+    type=["mp3", "wav", "m4a", "mp4", "mov", "webm"]
+)
 
-with col1:
-    st.subheader("📁 העלאת קובץ להאזנה וסיכום רחב")
-    uploaded_file = st.file_uploader("בחירת קובץ אודיו (MP3, WAV, M4A)", type=["mp3", "wav", "m4a"])
+if uploaded_file is not None:
+    file_size_mb = uploaded_file.size / (1024 * 1024)
+    st.info(f"📁 הקובץ נטען בהצלחה: {uploaded_file.name} ({file_size_mb:.2f} MB)")
 
-    if uploaded_file is not None and groq_api_key and gemini_api_key:
-        file_size_mb = uploaded_file.size / (1024 * 1024)
-        st.info(f"📁 קובץ נטען: {uploaded_file.name} ({file_size_mb:.2f} MB)")
-
-        if st.button("התחל תמלול וסיכום רחב עם Gemini", type="primary"):
+    if gemini_api_key:
+        if st.button("🚀 צור סיכום מלא לכל השיעור (מהתחלה ועד הסוף)", type="primary"):
             try:
-                client = Groq(api_key=groq_api_key)
-                
+                # שמירת הקובץ זמנית במערכת
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
                     tmp.write(uploaded_file.getvalue())
                     tmp_path = tmp.name
 
-                file_bytes = uploaded_file.getvalue()
-                total_size = len(file_bytes)
-                
-                # הקטנת החלקים ל-4MB כדי לעקוף לחלוטין את מגבלת הקצב של Groq
-                chunk_size = 4 * 1024 * 1024
-                num_chunks = math.ceil(total_size / chunk_size)
+                g_client = genai.Client(api_key=gemini_api_key)
 
-                st.info(f"✂️ מפצל את הקובץ ל-{num_chunks} חלקים קטנים ומאובטחים...")
-
-                full_transcript = []
-                progress_bar = st.progress(0)
-
-                for i in range(num_chunks):
-                    start_byte = i * chunk_size
-                    end_byte = min((i + 1) * chunk_size, total_size)
-                    chunk_data = file_bytes[start_byte:end_byte]
-
-                    chunk_filename = f"chunk_{i}.mp3"
-                    st.text(f"מתמלל חלק {i+1} מתוך {num_chunks}...")
-
-                    # ניסיון חוזר מקומי לחלק בודד אם יש עומס רגעי
-                    chunk_res = None
-                    for chunk_attempt in range(3):
-                        try:
-                            chunk_res = client.audio.transcriptions.create(
-                                file=(chunk_filename, chunk_data),
-                                model="whisper-large-v3",
-                                language="he",
-                                response_format="text"
-                            )
-                            break
-                        except Exception as c_err:
-                            if "rate_limit" in str(c_err).lower() or "413" in str(c_err) or "503" in str(c_err):
-                                time.sleep(5) # המתנה של 5 שניות במקרה של חסימת קצב
-                            else:
-                                raise c_err
-
-                    if chunk_res:
-                        full_transcript.append(chunk_res)
+                with st.spinner("⏳ מעלה את קובץ השיעור הענק לגוגל ומאזין לו מהתחלה ועד הסוף... (עשוי לקחת דקה-שתיים)"):
+                    # העלאת הקובץ ישירות ל-Gemini API (מצוין לקבצים גדולים וכבדים)
+                    audio_file = g_client.files.upload(file=tmp_path)
                     
-                    progress_bar.progress((i + 1) / num_chunks)
-                    time.sleep(4) # השהייה של 4 שניות בין חלק לחלק למניעת חסימת Rate Limit
+                    # המתנה עד שהקובץ יהיה מוכן לעיבוד בשרתים של גוגל
+                    while audio_file.state.name == "PROCESSING":
+                        time.sleep(3)
+                        audio_file = g_client.files.get(name=audio_file.name)
 
+                    if audio_file.state.name == "FAILED":
+                        raise Exception("עיבוד הקובץ נכשל בצד של גוגל.")
+
+                    # הנחיה לסיכום מלא, מפורט ומקיף לכל אורך השיעור
+                    prompt = """
+                    אתה עוזר אקדמי ומקצועי בכיר. להלן הקלטה מלאה של שיעור/הרצאה שהועלתה אלייך (מהתחלה ועד הסוף). 
+                    אנא האזן לקובץ כולו בצורה יסודית, וצור עבורי **סיכום מלא, רחב, מקיף ומעמיק מאוד** בעברית. 
+                    
+                    הסיכום צריך להקיף את כל חלקי השיעור ולכלול:
+                    1. **סקירה כללית ומבוא:** הנושאים המרכזיים שעלו לאורך כל השיעור.
+                    2. **פירוט מלא של תוכן השיעור לפי סדר הדברים:** הסברים מפורטים, מושגים מקצועיים שהוסברו, רעיונות מרכזיים ודוגמאות שהובאו על ידי המרצה מההתחלה ועד הסיום.
+                    3. **תובנות, מסקנות וסיכומים ביניים:** הדגשים החשובים ביותר שעלו מהדיון.
+                    4. **משימות המשך או סיכומי Action Items:** מטלות, תרגולים או נושאים להמשך למידה אם הוזכרו בשיעור.
+                    """
+
+                    # שליחה למודל של גוגל
+                    response = g_client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=[audio_file, prompt]
+                    )
+                    
+                    summary = response.text
+
+                # ניקוי הקובץ הזמני מהדיסק
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
 
-                transcribed_text = "\n".join(full_transcript)
-
-                if not transcribed_text or len(transcribed_text.strip()) < 3:
-                    st.error("לא זוהה דיבור ברור בקובץ.")
-                else:
-                    st.success("✅ התמלול המלא הושלם בהצלחה! מעביר לניתוח וסיכום רחב ב-Gemini...")
-
-                    g_client = genai.Client(api_key=gemini_api_key)
-
-                    prompt = f"""
-                    אתה עוזר אקדמי ומקצועי בכיר. להלן תמלול מלא של שיעור/הקלטה שהתקבל ממערכת תמלול. 
-                    אנא צור עבורי סיכום רחב, מקיף, מעמיק ומפורט מאוד בעברית. 
-                    הסיכום צריך לכלול:
-                    1. מבוא וסקירה כללית של הנושאים המרכזיים שעלו.
-                    2. פירוט מעמיק של התכנים לפי סדר הדברים (כולל מושגים מקצועיים, הסברים ודוגמאות אם הוזכרו).
-                    3. תובנות מרכזיות או החלטות שהתקבלו.
-                    4. סיכום פעולות או משימות המשך (Action Items) אם ישנן.
-
-                    להלן התמלול המלא לניתוח:
-                    {transcribed_text}
-                    """
-
-                    with st.spinner("🧠 Gemini מייצר עבורך סיכום רחב ומעמיק..."):
-                        response = None
-                        for attempt in range(3):
-                            try:
-                                response = g_client.models.generate_content(
-                                    model='gemini-3.6-flash',
-                                    contents=prompt,
-                                )
-                                break
-                            except Exception as api_err:
-                                if "503" in str(api_err) and attempt < 2:
-                                    time.sleep(3)
-                                else:
-                                    raise api_err
-
-                        summary = response.text
-
-                    st.markdown("---")
-                    st.markdown("### 📋 סיכום רחב ומקיף מאת Gemini")
-                    st.markdown(summary)
-
-                    with st.expander("🔍 הצג את התמלול המלא שהופק"):
-                        st.write(transcribed_text)
-
-                    st.download_button(
-                        label="📥 הורד סיכום כקובץ טקסט",
-                        data=summary,
-                        file_name="gemini_comprehensive_summary.txt",
-                        mime="text/plain"
-                    )
+                # שמירת הסיכום בזיכרון של הסטרימלייט כדי שיישאר גם אחרי הקראה
+                st.session_state['generated_summary'] = summary
 
             except Exception as e:
                 st.error(f"שגיאה בתהליך: {e}")
+    else:
+        st.warning("⚠️ נא להזין את מפתח ה-Google API בשדה למעלה כדי להתחיל.")
 
-with col2:
-    st.subheader("🎙️ הקלטה ישירה מהמיקרופון")
-    audio_recorded = mic_recorder(
-        start_prompt="🔴 התחל הקלטה",
-        stop_prompt="⏹️ עצור הקלטה",
-        just_once=False,
-        key="mic_recorder"
+# הצגת הסיכום אם קיים בזיכרון
+if 'generated_summary' in st.session_state:
+    summary = st.session_state['generated_summary']
+    
+    st.success("✅ הסיכום המלא הושלם בהצלחה!")
+    st.markdown("---")
+    st.markdown("### 📋 סיכום השיעור המלא מאת Gemini")
+    st.markdown(summary)
+
+    # כפתור הורדה כקובץ טקסט
+    st.download_button(
+        label="📥 הורד סיכום כקובץ טקסט",
+        data=summary,
+        file_name="Lesson_Full_Summary.txt",
+        mime="text/plain"
     )
 
-    if audio_recorded and groq_api_key and gemini_api_key:
-        st.audio(audio_recorded['bytes'], format='audio/wav')
-        
-        if st.button("תמלל וסכם הקלטה חיה עם Gemini"):
+    # אפשרות הקראה קולית (Text-to-Speech)
+    st.markdown("---")
+    st.subheader("🎧 הקראה קולית של הסיכום")
+    if st.button("🔊 הפק הקראה קולית לסיכום"):
+        with st.spinner("מייצר קובץ שמע להקראה..."):
             try:
-                client = Groq(api_key=groq_api_key)
-                with st.spinner("מתמלל הקלטה חיה..."):
-                    res = client.audio.transcriptions.create(
-                        file=("mic_audio.wav", audio_recorded['bytes']),
-                        model="whisper-large-v3",
-                        response_format="text",
-                        language="he"
-                    )
+                # יצירת קובץ קולי בעברית מתוך טקסט הסיכום
+                tts = gTTS(text=summary, lang='he', slow=False)
+                tts_fp = io.BytesIO()
+                tts.write_to_fp(tts_fp)
+                tts_fp.seek(0)
                 
-                g_client = genai.Client(api_key=gemini_api_key)
-                
-                with st.spinner("Gemini מייצר סיכום..."):
-                    response = g_client.models.generate_content(
-                        model='gemini-3.6-flash',
-                        contents=f"סכם בהרחבה ובצורה מקצועית את קטע הדיבור הבא בעברית:\n{res}"
-                    )
-                    summary = response.text
-
-                st.success("התהליך הושלם בהצלחה!")
-                st.markdown(summary)
-            except Exception as e:
-                st.error(f"שגיאה: {e}")
+                st.audio(tts_fp, format='audio/mp3')
+                st.success("ההקראה מוכנה! תוכל להאזין לה ישירות כאן.")
+            except Exception as tts_err:
+                st.error(f"שגיאה ביצירת ההקראה הקולית: {tts_err}")

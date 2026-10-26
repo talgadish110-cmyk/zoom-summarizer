@@ -2,75 +2,75 @@ import os
 import tempfile
 import gc
 import streamlit as st
+from google import genai
 
 # הגדרת עמוד Streamlit
 st.set_page_config(
-    page_title="Zoom Meeting Full Summarizer", 
+    page_title="Zoom Gemini Full Summarizer", 
     page_icon="🎙️", 
     layout="centered"
 )
 
-st.title("🎙️ Zoom Meeting Full Summarizer")
-st.write("העלה את קובץ ה־MP3 של הפגישה וקבל סיכום מלא מתחילת ההקלטה ועד סופה בלי לפספס דבר.")
+st.title("🎙️ Zoom Meeting Summarizer with Gemini")
+st.write("העלה את קובץ האודיו (עד 2GB), תן לג׳ימיני להקשיב ולקבל סיכום מלא מהתחלה ועד הסוף עם אפשרות הורדה.")
 
-# העלאת קובץ MP3 (או קבצי אודיו תואמים)
+# קבלת מפתח ה-API מתוך ה-Secrets של Streamlit שהגדרנו
+api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
+
+# העלאת קובץ (MP3 או קבצי אודיו/וידאו נתמכים)
 uploaded_file = st.file_uploader(
-    "בחר קובץ MP3 של ההקלטה", 
-    type=["mp3", "wav", "m4a"]
+    "בחר קובץ הקלטה (MP3, WAV, M4A, MP4)", 
+    type=["mp3", "wav", "m4a", "mp4"]
 )
 
-def chunk_text(text, max_chars=12000):
-    """חיתוך טקסט ארוך למקטעים כדי שלא נחרוג ממגבלת הזיכרון"""
-    return [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
+def process_with_gemini(file_path):
+    """מעלה את הקובץ ל-Gemini API ומפיק סיכום מלא מתחילת הפגישה ועד סופה"""
+    if not api_key:
+        raise ValueError("מפתח API של Gemini (GEMINI_API_KEY) לא הוגדר ב-Streamlit Secrets!")
 
-def process_audio_and_summarize(file_path):
-    """
-    מעבד את קובץ האודיו מהדיסק המקומי, מבצע תמלול,
-    ומפיק סיכום מלא מהתחלה ועד הסוף.
-    """
-    st.info("שלב 1/3: קורא את נתוני האודיו מהדיסק המקומי בצורה בטוחה...")
-    
-    # --- כאן תוכל לחבר בעתיד את ה-API האמיתי שלך (לדוגמה Gemini API או OpenAI) ---
-    # with open(file_path, "rb") as f:
-    #     ...
-    
-    # טקסט סימולציה לצורך הדגמה (מחליפים כאן את התמלול האמיתי):
-    full_transcript = "כאן יופיע כל טקסט התמלול המלא של פגישת ה־Zoom מהרגע הראשון ועד הסוף..." * 25
+    # יצירת מופע לקוח גוגל GenAI
+    client = genai.Client(api_key=api_key)
 
-    st.info("שלב 2/3: מנתח את התמלול ומחלק לחלקים לניתוח מקיף...")
-    chunks = chunk_text(full_transcript)
+    st.info("שלב 1/2: מעלה את קובץ האודיו לענן של Gemini...")
     
-    partial_summaries = []
-    for i, chunk in enumerate(chunks):
-        # --- כאן תוכל לשלוח כל מקטע למודל ה-AI לקבלת סיכום ביניים ---
-        partial_summaries.append(f"סיכום חלק {i+1}: עיקרי הנושאים שהוצגו בשלב זה של הפגישה.")
+    # העלאת הקובץ דרך ה-File API של גוגל (תומך בקבצים גדולים מאוד)
+    audio_file_ref = client.files.upload(file=file_path)
+    
+    st.info("שלב 2/2: ג׳ימיני מקשיב להקלטה ומכין סיכום מלא מהתחלה ועד הסוף... (פעולה זו עשויה לקחת דקה-שתיים בהתאם לאורך הקובץ)")
 
-    st.info("שלב 3/3: מאחד את כל החלקים ומפיק סיכום־על סופי מהתחלה ועד הסוף...")
-    
-    # גיבוש סיכום סופי ורציף
-    final_summary = f"""
-    ### 🎯 סיכום מקיף וכולל של פגישת ה־Zoom (מהתחלה ועד הסוף)
-    
-    * **היקף הניתוח:** ההקלטה עובדה ונותחה דרך {len(chunks)} מקטעים מרכזיים.
-    * **תקציר הנושאים המרכזיים:**
-      1. **פתיחת הפגישה:** הצגת הנושאים המרכזיים שעל הפרק.
-      2. **דיון שוטף:** מעבר על נתונים, סטטוסים ומשימות.
-      3. **החלטות ופעולות המשך (Action Items):** סיכום ההחלטות שהתקבלו לקראת המשך העבודה.
-    
-    *(סיכום זה הופק מניתוח רציף של כל קובץ ה־MP3 שהועלה).*
+    # פקודה מפורטת לג׳ימיני כדי לוודא שלא יפספס שום חלק מהפגישה
+    prompt = """
+    הקשב היטב להקלטת הפגישה המצורפת מהרגע הראשון ועד הסוף בלי לפספס דבר. 
+    הפק עבורי סיכום מקצועי, מקיף ומסודר הכולל:
+    1. **סקירה כללית** של נושאי הפגישה.
+    2. **נקודות מרכזיות ודיונים עיקריים** שהועלו לכל אורך ההקלטה.
+    3. **החלטות ופעולות המשך (Action Items)** ברורות שנקבעו בסיום.
+    כתוב את הסיכום בשפה נקייה, מקצועית ומסודרת.
     """
 
-    return full_transcript, final_summary
+    # שימוש במודל gemini-2.5-flash התומך בעיבוד אודיו ארוך ואיכותי
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=[audio_file_ref, prompt]
+    )
+
+    # מחיקת הקובץ מהשרת של גוגל לאחר קבלת התוצאה לשמירה על פרטיות
+    try:
+        client.files.delete(name=audio_file_ref.name)
+    except Exception:
+        pass
+
+    return response.text
 
 if uploaded_file is not None:
     file_size_mb = uploaded_file.size / (1024 * 1024)
     st.success(f"הקובץ '{uploaded_file.name}' הועלה בהצלחה (גודל: {file_size_mb:.2f} MB)")
     
-    if st.button("התחל תמלול וסיכום מלא"):
+    if st.button("🚀 שלח לג׳ימיני לקבלת סיכום מלא"):
         tmp_path = None
         try:
-            # שלב א': שמירה זמנית ובטוחה בדיסק בחלקים (מונע ספייקים ב-RAM)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
+            # שמירה זמנית ובטוחה בדיסק בחלקים (מונע קריסת RAM בזמן העלאה)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
                 chunk_size = 1024 * 1024  # בלוקים של 1MB
                 while True:
                     chunk = uploaded_file.read(chunk_size)
@@ -79,28 +79,33 @@ if uploaded_file is not None:
                     tmp_file.write(chunk)
                 tmp_path = tmp_file.name
 
-            # שלב ב': הרצת העיבוד
-            with st.spinner("האפליקציה מקשיבה להקלטה ומייצרת סיכום מלא... אנא המתן."):
-                transcript, full_summary = process_audio_and_summarize(tmp_path)
+            # עיבוד ההקלטה מול ג׳ימיני
+            with st.spinner("ג׳ימיני מקשיב ומעבד את ההקלטה... אנא המתן באורך רוח."):
+                summary_result = process_with_gemini(tmp_path)
 
-            # שלב ג': הצגת התוצאות למשתמש
-            st.markdown("---")
-            st.subheader("📋 תוצאות הסיכום המלא")
-            st.markdown(full_summary)
+            if summary_result:
+                st.markdown("---")
+                st.subheader("📋 סיכום הפגישה מאת Gemini")
+                st.markdown(summary_result)
 
-            with st.expander("📄 לחץ כאן לצפייה בתמלול המלא והגולמי (מהתחלה ועד הסוף)"):
-                st.text_area("טקסט תמלול מלא", transcript, height=300)
+                # הוספת כפתור הורדה (Download Button) לקובץ טקסט
+                st.download_button(
+                    label="📥 הורד את הסיכום כקובץ טקסט (TXT)",
+                    data=summary_result,
+                    file_name="zoom_meeting_summary.txt",
+                    mime="text/plain"
+                )
 
         except Exception as e:
-            st.error(f"אירעה שגיאה במהלך עיבוד הקובץ: {e}")
+            st.error(f"אירעה שגיאה במהלך העיבוד מול Gemini: {e}")
 
         finally:
-            # שלב ד': ניקוי בטוח של הקובץ הזמני מהדיסק
+            # ניקוי בטוח של הקובץ הזמני מהדיסק של השרת
             if tmp_path and os.path.exists(tmp_path):
                 try:
                     os.unlink(tmp_path)
                 except Exception:
                     pass
             
-            # שלב ה': פינוי זיכרון אגרסיבי למניעת קריסות RAM
+            # פינוי זיכרון אגרסיבי למניעת קריסות RAM
             gc.collect()

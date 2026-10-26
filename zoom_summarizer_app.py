@@ -111,3 +111,13 @@ def main():
         st.download_button(
             label="📥 הורד את הסיכום כקובץ TXT",
             data=st.session_state["summary"],
+            file_name="zoom_meeting_summary.txt",
+            mime="text/plain",
+        )
+
+
+try:
+    main()
+except Exception as e:
+    st.error("שגיאה לא צפויה באפליקציה:")
+    st.exception(e)

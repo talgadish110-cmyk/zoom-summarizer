@@ -1,3 +1,5 @@
 streamlit
 google-genai
 gTTS
+streamlit>=1.30.0
+requests

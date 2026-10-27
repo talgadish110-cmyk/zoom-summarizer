@@ -6,7 +6,6 @@ st.set_page_config(page_title="Zoom Summarizer", page_icon="🎙️", layout="ce
 
 st.title("🎙️ Zoom Meeting Summarizer")
 
-# בדיקת טעינת ספריית גוגל
 try:
     from google import genai
     LIB_LOADED = True
@@ -14,7 +13,6 @@ except Exception as import_err:
     LIB_LOADED = False
     st.error(f"שגיאה בטעינת ספריית google-genai: {import_err}")
 
-# שליפת מפתח ה־API
 api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
 
 if not api_key:
@@ -39,15 +37,15 @@ if uploaded_file is not None and LIB_LOADED:
                         tmp_file.write(uploaded_file.getvalue())
                         tmp_path = tmp_file.name
 
-                with st.spinner("מעלה לג׳ימיני ומייצר סיכום מלא... אנא המתן באורך רוח לקובץ גדול."):
+                with st.spinner("מעלה לג׳ימיני ומייצר סיכום מלא... אנא המתן."):
                     client = genai.Client(api_key=api_key)
                     
                     # העלאת הקובץ לענן
                     audio_file_ref = client.files.upload(file=tmp_path)
                     
-                    # הפקת סיכום עם המודל המעודכן gemini-3.8-flash
+                    # הפקת סיכום עם המודל היציב gemini-1.5-flash
                     response = client.models.generate_content(
-                        model='gemini-3.8-flash',
+                        model='gemini-1.5-flash',
                         contents=[
                             audio_file_ref, 
                             "הקשב היטב להקלטת הפגישה המצורפת מהרגע הראשון ועד הסוף בלי לפספס דבר. הפק עבורי סיכום מקצועי, מקיף ומסודר הכולל: סקירה כללית, נקודות מרכזיות, והחלטות או פעולות המשך (Action Items)."
@@ -58,7 +56,6 @@ if uploaded_file is not None and LIB_LOADED:
                     st.subheader("📋 תוצאות הסיכום המלא")
                     st.markdown(response.text)
 
-                    # כפתור הורדה
                     st.download_button(
                         label="📥 הורד את הסיכום כקובץ TXT",
                         data=response.text,

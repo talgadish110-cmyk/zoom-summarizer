@@ -39,15 +39,15 @@ if uploaded_file is not None and LIB_LOADED:
                         tmp_file.write(uploaded_file.getvalue())
                         tmp_path = tmp_file.name
 
-                with st.spinner("מעלה לג׳ימיני ומייצר סיכום מלא... אנא המתן."):
+                with st.spinner("מעלה לג׳ימיני ומייצר סיכום מלא... אנא המתן באורך רוח לקובץ גדול."):
                     client = genai.Client(api_key=api_key)
                     
                     # העלאת הקובץ לענן
                     audio_file_ref = client.files.upload(file=tmp_path)
                     
-                    # הפקת סיכום
+                    # הפקת סיכום עם המודל המעודכן gemini-3.8-flash
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-3.8-flash',
                         contents=[
                             audio_file_ref, 
                             "הקשב היטב להקלטת הפגישה המצורפת מהרגע הראשון ועד הסוף בלי לפספס דבר. הפק עבורי סיכום מקצועי, מקיף ומסודר הכולל: סקירה כללית, נקודות מרכזיות, והחלטות או פעולות המשך (Action Items)."
